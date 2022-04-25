@@ -1,10 +1,10 @@
 // globals
-let h = 50;                 //width of the lifeform in pixels
-let w = 50;                 // height of the lifeform in pixels
-let x = 10;                 // world x size
-let y = 10;                 // world y size
-let startinglife = 1;     // total number of live cells at the start
-let generations = 1;      // how many generations to run the simulation
+let h = 10;                 //width of the lifeform in pixels
+let w = 10;                 // height of the lifeform in pixels
+let x = 50;                 // world x size
+let y = 50;                 // world y size
+let startinglife = 50;     // total number of live cells at the start
+let generations = 20;      // how many generations to run the simulation
 let lifeform = [];
 let gen_len = 5;            // genome length
 let mutation_rate = 0.01;   // mutation rate
@@ -49,7 +49,7 @@ async function setupWorld(x, y, startinglife) {
     try {
         if (worldExists) {
             console.log('World Exists...');
-            lifeCreated = await createLife(startinglife, x, y);
+            lifeCreated = createLife(startinglife, x, y);
             console.log('Life Created: ', lifeCreated);
         }
     }
@@ -107,22 +107,24 @@ function createLife(population, x, y) {
                        R U N   S I M U L A T O R
 
    ================================================================= */
-const runSimulation = async (generation, ready) => {
+const runSimulation = (generation, ready) => {
     setTimeout(function() {
         if (ready) {
-            // pick a random guy to play with
-            let randomGuy = Math.floor(Math.random() * startinglife);
+            
             //console.log(`random guy ${randomGuy} start position: ${lifeform[randomGuy].pos_x}:${lifeform[randomGuy].pos_y}`);
 
             // wait until the setup has completed
-
+            
             for (var year = 0; year < generation; year += 1) {
                 // another for loop to allow each lifeform to do things
                 for (var pop = 0; pop < startinglife; pop += 1) {
-
+                    // pick a random guy to play with
+                    let randomGuy = Math.floor(Math.random() * startinglife);
+                    
                     $('#year span').text(year);
                     $('#pop_turn span').text(pop);
-                    /*
+                    
+                    
                     let direction = Math.floor(Math.random() * 4);
                     switch(direction) {
                         case 0:
@@ -138,7 +140,7 @@ const runSimulation = async (generation, ready) => {
                             lifeform[randomGuy].moveNorth();
                             break;
                     }
-                    */
+                    
 
                 }
             }
@@ -160,15 +162,16 @@ function createGenome() {
 }
 
 function updatePosition(id, new_x, new_y, old_x, old_y) {
-    console.log('updating position...')
-    console.log(`${old_x}:${old_y} => ${new_x}:${new_y}`);
-    // clear old cell
-    $(`.world [data-xy=${old_x}-${old_y}]`).css({'background': 'white'}).removeClass('live-cell').attr('data-id', null);
-    // set the new cell location to the lifeform colour.
-    $(`.world [data-xy=${new_x}-${new_y}]`).css({
-        background: `rgb(${lifeform[id].color[0]}, ${lifeform[id].color[1]}, ${lifeform[id].color[2]})`
-    }).addClass('live-cell').attr('data-id', id);
-    console.log(id, 'position updated');
+    
+    setTimeout(() => {
+        console.log(`updating position...[${id}]`)
+        // clear old cell
+        $(`.world [data-xy=${old_x}-${old_y}]`).css({'background': 'white'}).removeClass('live-cell').attr('data-id', null);
+        // set the new cell location to the lifeform colour.
+        $(`.world [data-xy=${new_x}-${new_y}]`).css({
+            background: `rgb(${lifeform[id].color[0]}, ${lifeform[id].color[1]}, ${lifeform[id].color[2]})`
+        }).addClass('live-cell').attr('data-id', id);
+    }, 250);
 }
 
 class Life {
@@ -187,21 +190,14 @@ class Life {
 
     }
 
-    set newX(x) {
-        this.pos_x = x;
-    }
-
-    set newY(y) {
-        this.pos_y = y;
-    }
-
     // move east
     moveEast() {
-        if (this.pos_x < x ) {
+        if (this.pos_x < (x - 1) ) {
             this.old_x = this.pos_x;
+            this.old_y = this.pos_y;
             this.pos_x += 1;
-            console.log('moving east');
-            console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
+            //console.log(`moving lifeform[${this.id}] east`);
+            //console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
             updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
             return true;
         } else {
@@ -212,9 +208,10 @@ class Life {
     moveWest() {
         if (this.pos_x > 0) {
             this.old_x = this.pos_x;
+            this.old_y = this.pos_y;
             this.pos_x -= 1;
-            console.log('moving west');
-            console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
+            //console.log('moving west');
+            //console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
             updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
             return true;
         } else {
@@ -225,9 +222,10 @@ class Life {
     moveNorth() {
         if (this.pos_y > 0) {
             this.old_y = this.pos_y;
+            this.old_x = this.pos_x;
             this.pos_y -= 1;
-            console.log('moving north');
-            console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
+            //console.log('moving north');
+            //console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
             updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
             return true;
         } else {
@@ -236,11 +234,12 @@ class Life {
     }
     // move south
     moveSouth() {
-        if (this.pos_y < y ) {
+        if (this.pos_y < (y - 1) ) {
             this.old_y = this.pos_y;
+            this.old_x = this.pos_x;
             this.pos_y += 1;
-            console.log('moving south');
-            console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
+            //console.log('moving south');
+            //console.log(`${this.old_x}:${this.old_y} => ${this.pos_x}:${this.pos_y}`);
             updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
             return true;
         } else {
