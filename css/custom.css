@@ -1,0 +1,45 @@
+.universe {
+    display:flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.world {
+    background: white;
+    border: 1px solid black;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+    min-width: 500px;
+}
+
+.information {
+    display: flex;
+    flex-direction: column;
+    width: 400px;
+}
+
+.lifeform {
+    border: 1px solid #000;
+    min-height: 200px;
+    margin-bottom: 10px;
+    padding: 10px;
+}
+
+.stats { 
+    display: flex;
+    flex-direction: row;
+    gap:40px;
+    padding: 10px;
+    border: 1px solid gray;
+}
+
+.live-cell {
+    background: white;
+    border-radius:50%;
+}
+
+.controls {
+    padding: 20px 0;
+}
