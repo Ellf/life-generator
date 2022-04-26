@@ -3,7 +3,7 @@ let h = 10;                 //width of the lifeform in pixels
 let w = 10;                 // height of the lifeform in pixels
 let x = 50;                 // world x size
 let y = 50;                 // world y size
-let startinglife = 50;     // total number of live cells at the start
+let startinglife = 10;     // total number of live cells at the start
 let generations = 20;      // how many generations to run the simulation
 let lifeform = [];
 let gen_len = 5;            // genome length
@@ -12,6 +12,8 @@ let sensory_inputs = 10;    // sensory inputs
 let inner_neurons = 2;      // inner neurons
 let action_outputs = 10;    // action outputs
 let worldReady = false;
+let yearCounter = 0;
+let popCounter = 0;
 
 // Create the grid
 $(document).ready(async () => {
@@ -92,7 +94,6 @@ function createLife(population, x, y) {
 
         lifeform[g] = new Life(g, gen_len, sensory_inputs, inner_neurons, action_outputs);
 
-
         $(`.world [data-xy='${lifeform[g].pos_x}-${lifeform[g].pos_y}']`).addClass('live-cell').attr('data-id', g).css({
             background: `rgb(${lifeform[g].color[0]}, ${lifeform[g].color[1]}, ${lifeform[g].color[2]})`
         });
@@ -110,21 +111,19 @@ function createLife(population, x, y) {
 const runSimulation = (generation, ready) => {
     setTimeout(function() {
         if (ready) {
-            
-            //console.log(`random guy ${randomGuy} start position: ${lifeform[randomGuy].pos_x}:${lifeform[randomGuy].pos_y}`);
 
-            // wait until the setup has completed
-            
-            for (var year = 0; year < generation; year += 1) {
+            while ( yearCounter < generation ) {
+                popCounter = 0;
                 // another for loop to allow each lifeform to do things
-                for (var pop = 0; pop < startinglife; pop += 1) {
+                while ( popCounter < startinglife) {
+
                     // pick a random guy to play with
                     let randomGuy = Math.floor(Math.random() * startinglife);
+
+                    //$('#year span').text(yearCounter);
+                    //$('#pop_turn span').text(popCounter);
                     
-                    $('#year span').text(year);
-                    $('#pop_turn span').text(pop);
-                    
-                    
+
                     let direction = Math.floor(Math.random() * 4);
                     switch(direction) {
                         case 0:
@@ -140,29 +139,27 @@ const runSimulation = (generation, ready) => {
                             lifeform[randomGuy].moveNorth();
                             break;
                     }
-                    
+                    popCounter += 1;
 
                 }
+                yearCounter += 1;
             }
         }
     }, 100);
 }
 
-function createGenome() {
-    // javascript uses the following bitwise operators
-    /*
-        & AND
-        | OR
-        ^ XOR
-        ~ NOT
-        << SHIFT LEFT (a << b) shift a b bits left
-        >> SHIFT RIGHT (discarding bits shifted off)
-        >>> Zero fill (right shift adding 0's left)
-    */
+function createGenome(glength) {
+    let gnome = [];
+    for (let g = 0; g < glength; g+=1) {
+        gnome[g] = Math.random(Math.random());
+    }
+
+    return gnome;
+    
 }
 
 function updatePosition(id, new_x, new_y, old_x, old_y) {
-    
+
     setTimeout(() => {
         console.log(`updating position...[${id}]`)
         // clear old cell
@@ -171,12 +168,13 @@ function updatePosition(id, new_x, new_y, old_x, old_y) {
         $(`.world [data-xy=${new_x}-${new_y}]`).css({
             background: `rgb(${lifeform[id].color[0]}, ${lifeform[id].color[1]}, ${lifeform[id].color[2]})`
         }).addClass('live-cell').attr('data-id', id);
-    }, 250);
+    }, 1250);
 }
 
 class Life {
 
     constructor(id, genome_length, sensory_inputs, inner_neurons, action_outputs) {
+        this.alive = true; // always alive at the start
         this.id = id;
         this.pos_x =  Math.floor(Math.random() * x );
         this.pos_y = Math.floor(Math.random() * y );
@@ -187,7 +185,8 @@ class Life {
         this.inner_neurons = inner_neurons;
         this.action_outputs = action_outputs;
         this.color =  [150, 150, 200]; //[Math.floor(Math.random() * 255), Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)]
-
+        this.age = 0; // always start at age 0
+        this.pickGenome = createGenome(genome_length);
     }
 
     // move east
