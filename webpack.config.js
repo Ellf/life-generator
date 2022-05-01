@@ -1,14 +1,23 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+// const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin; 
 
 module.exports = {
     mode: 'development',
     entry: {
+        simulator: path.resolve(__dirname, 'src/simulator.js'),
         bundle: path.resolve(__dirname, 'src/index.js'),
     },
     devtool: 'inline-source-map',
     devServer: {
-        static: './dist',
+        static: {
+            directory: path.resolve(__dirname, './dist')
+        },
+        port: 3000,
+        open: true,
+        hot: true,
+        compress: true,
+        historyApiFallback: true,
     },
     plugins: [
         new HtmlWebpackPlugin({
@@ -16,11 +25,12 @@ module.exports = {
             filename: 'index.html',
             template: 'src/template.html'
         }),
+        // new BundleAnalyzerPlugin(),
     ],
     output: {
         path: path.resolve(__dirname, 'dist'),
-        filename: '[name].js',
-        clean: true,
+        filename: '[name].[contenthash].js',
+        clean: true, 
     },
     module: {
         rules: [{
@@ -29,6 +39,8 @@ module.exports = {
         }],
     },
     optimization: {
-        runtimeChunk: 'single',
+        splitChunks: {
+            chunks: 'all'
+        }
     },
 };

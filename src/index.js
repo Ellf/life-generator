@@ -1,52 +1,23 @@
 import './style.css';
 import _ from 'lodash';
-/* 
-Thanks to Dave Miller's YouTube video and github repository for providing the inspiration and variable names along with many other ideas for this learning project.
-
-https://github.com/davidrmiller/biosim4
-*/
-
-// self-replication
-// blueprint -- genome
-// inherit blueprint
-// mutations
-// selection, natural or otherwise
-
-var startTime = performance.now();
-// globals
-let h = 8;                 //width of the lifeform in pixels
-let w = 8;                 // height of the lifeform in pixels
-let x = 64;                 // world x size
-let y = 64;                 // world y size
-let startinglife = 50;      // total number of live cells at the start
-let steps = 10;             // how many steps to run the simulation
-let generation = 0;         // the generation of the simulation. We start at gen 0 and each new generation will be a more complicated gene pool.
-let lifeform = [];
-let gen_len = 4;            // genome length
-let mutation_rate = 0.01;   // mutation rate
-let sensory_inputs = 10;    // sensory inputs
-let inner_neurons = 2;      // inner neurons
-let action_outputs = 10;    // action outputs
-let worldReady = false;
-let yearCounter = 0;
-let popCounter = 0;
-
-
+import GLOBAL from './globals.js';
+import './simulator.js';
+import runSimulation from './simulator.js';
 
 // Create the grid
 $(document).ready(async () => {
-    worldReady = await setupWorld(x, y, startinglife);
+    GLOBAL.worldReady = await setupWorld(GLOBAL.x, GLOBAL.y, GLOBAL.startinglife);
     var endTime = performance.now();
-    console.log(`World Ready after ${(endTime - startTime) / 1000} seconds`);
+    console.log(`World Ready after ${(endTime - GLOBAL.startTime) / 1000} seconds`);
     // run the simulation after the setup has completed.
-    runSimulation(steps, worldReady);
+    runSimulation(GLOBAL.steps, GLOBAL.worldReady);
 
     // event listener on button to restart simulation
     $('#regenerateWorld').on('click', () => {
         console.log('creating new world');
-        worldReady = setupWorld(x, y, startinglife);
-        console.log(worldReady);
-        runSimulation(steps, worldReady);
+        GLOBAL.worldReady = setupWorld(GLOBAL.x, GLOBAL.y, GLOBAL.startinglife);
+        console.log(GLOBAL.worldReady);
+        runSimulation(GLOBAL.steps, GLOBAL.worldReady);
         $('.live-cell').on('click', getClicked);
     });
 
@@ -90,12 +61,12 @@ function createWorld(x, y) {
     console.log('Creating World...');
     $('.world').html('');
     $('.world').css({
-        'width': x * w,
-        'height': y * h
+        'width': x * GLOBAL.w,
+        'height': y * GLOBAL.h
     });
     for (let horizontal = 0; horizontal < x; horizontal += 1 ) {
         for (let vertical = 0; vertical < y; vertical += 1 ) {
-            $('.world').append(`<div data-xy="${vertical}-${horizontal}" class="cell" style="width:${w}px; height:${h}px;background:white;"></div>`);
+            $('.world').append(`<div data-xy="${vertical}-${horizontal}" class="cell" style="width:${GLOBAL.w}px; height:${GLOBAL.h}px;background:white;"></div>`);
         };
     };
 
@@ -109,61 +80,17 @@ function createLife(population) {
     for (let g = 0; g < population; g += 1) {
 
         // new instance of a lifeform for each pop
-        console.log('creating lifeform:', g)
-        lifeform[g] = new Life(g, gen_len, sensory_inputs, inner_neurons, action_outputs);
+        
+        GLOBAL.lifeform[g] = new Life(g, GLOBAL.gen_len, GLOBAL.sensory_inputs, GLOBAL.inner_neurons, GLOBAL.action_outputs);
 
-        $(`.world [data-xy='${lifeform[g].pos_x}-${lifeform[g].pos_y}']`).addClass('live-cell').attr('data-id', g).css({
-            background: `rgb(${lifeform[g].color[0]}, ${lifeform[g].color[1]}, ${lifeform[g].color[2]})`
+        $(`.world [data-xy='${GLOBAL.lifeform[g].pos_x}-${GLOBAL.lifeform[g].pos_y}']`).addClass('live-cell').attr('data-id', g).css({
+            background: `rgb(${GLOBAL.lifeform[g].color[0]}, ${GLOBAL.lifeform[g].color[1]}, ${GLOBAL.lifeform[g].color[2]})`
         });
 
     }
 
     return true;
 
-}
-/* =================================================================
-
-                       R U N   S I M U L A T O R
-
-   ================================================================= */
-const runSimulation = (generation, ready) => {
-    setTimeout(function() {
-        if (ready) {
-
-            while ( yearCounter < generation ) {
-                popCounter = 0;
-                // another for loop to allow each lifeform to do things
-                while ( popCounter < startinglife) {
-
-                    // pick a random guy to play with
-                    let randomGuy = Math.floor(Math.random() * startinglife);
-
-                    //$('#year span').text(yearCounter);
-                    //$('#pop_turn span').text(popCounter);
-                    
-
-                    let direction = Math.floor(Math.random() * 4);
-                    switch(direction) {
-                        case 0:
-                           lifeform[randomGuy].moveEast();
-                            break;
-                        case 1:
-                            lifeform[randomGuy].moveSouth();
-                            break;
-                        case 2:
-                            lifeform[randomGuy].moveWest();
-                            break;
-                        case 3:
-                            lifeform[randomGuy].moveNorth();
-                            break;
-                    }
-                    popCounter += 1;
-
-                }
-                yearCounter += 1;
-            }
-        }
-    }, 100);
 }
 
 // definition of genes
@@ -299,7 +226,7 @@ function updatePosition(id, new_x, new_y, old_x, old_y) {
         $(`.world [data-xy=${old_x}-${old_y}]`).css({'background': 'white'}).removeClass('live-cell').attr('data-id', null);
         // set the new cell location to the lifeform colour.
         $(`.world [data-xy=${new_x}-${new_y}]`).css({
-            background: `rgb(${lifeform[id].color[0]}, ${lifeform[id].color[1]}, ${lifeform[id].color[2]})`
+            background: `rgb(${GLOBAL.lifeform[id].color[0]}, ${GLOBAL.lifeform[id].color[1]}, ${GLOBAL.lifeform[id].color[2]})`
         }).addClass('live-cell').attr('data-id', id);
     }, 1250);
 }
@@ -309,14 +236,14 @@ class Life {
     constructor(id, genome_length, sensory_inputs, inner_neurons, action_outputs) {
         this.alive = true; // always alive at the start
         this.id = id;
-        this.pos_x =  Math.floor(Math.random() * x );
-        this.pos_y = Math.floor(Math.random() * y );
+        this.pos_x =  Math.floor(Math.random() * GLOBAL.x );
+        this.pos_y = Math.floor(Math.random() * GLOBAL.y );
         this.old_x = this.pos_x;
         this.old_y = this.pos_y;
-        this.genome_length = genome_length;
-        this.sensory_inputs = sensory_inputs;
-        this.inner_neurons = inner_neurons;
-        this.action_outputs = action_outputs;
+        this.genome_length = GLOBAL.genome_length;
+        this.sensory_inputs = GLOBAL.sensory_inputs;
+        this.inner_neurons = GLOBAL.inner_neurons;
+        this.action_outputs = GLOBAL.action_outputs;
         this.color =  [150, 150, 200]; //[Math.floor(Math.random() * 255), Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)]
         this.age = 0; // always start at age 0
         this.genome = createGenome(genome_length);
@@ -324,7 +251,7 @@ class Life {
 
     // move east
     moveEast() {
-        if (this.pos_x < (x - 1) ) {
+        if (this.pos_x < (GLOBAL.x - 1) ) {
             this.old_x = this.pos_x;
             this.old_y = this.pos_y;
             this.pos_x += 1;
@@ -366,7 +293,7 @@ class Life {
     }
     // move south
     moveSouth() {
-        if (this.pos_y < (y - 1) ) {
+        if (this.pos_y < (GLOBAL.y - 1) ) {
             this.old_y = this.pos_y;
             this.old_x = this.pos_x;
             this.pos_y += 1;
