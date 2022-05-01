@@ -11,11 +11,11 @@
     display: flex;
     flex-wrap: wrap;
     flex-direction: row;
-    min-width: 500px;
+    min-width: 100px;
 }
 
 .information {
-    display: flex;
+    display: none;
     flex-direction: column;
     width: 400px;
 }
@@ -28,7 +28,7 @@
 }
 
 .stats { 
-    display: flex;
+    display: none;
     flex-direction: row;
     gap:40px;
     padding: 10px;
