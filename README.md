@@ -16,8 +16,11 @@ https://github.com/davidrmiller/biosim4
 * selection, natural or otherwise
 
 Genomes are collection of genes:
+
 one gene = 8-hexadecimal digits ########
+
 32 binary bits of data
+
 f 1 3 5 1 f e 3
 
 e.g.
