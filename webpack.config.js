@@ -5,7 +5,6 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
     mode: 'development',
     entry: {
-        simulator: path.resolve(__dirname, 'src/simulator.js'),
         bundle: path.resolve(__dirname, 'src/index.js'),
     },
     devtool: 'inline-source-map',

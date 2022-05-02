@@ -25,7 +25,7 @@ export default {
     w: 8,
     x: 64,
     y: 64,
-    startinglife:50,
+    startinglife:20,
     steps: 10,
     generation: 0,
     lifeform: [],

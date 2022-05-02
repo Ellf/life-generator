@@ -2,10 +2,15 @@ import './style.css';
 import _ from 'lodash';
 import GLOBAL from './globals.js';
 import './simulator.js';
+import { randomInt, setBit } from './utils.js';
 import runSimulation from './simulator.js';
+import SENS from './sensor.js';
+import ACTS from './action.js';
 
 // Create the grid
 $(document).ready(async () => {
+    //console.log(Object.keys(SENS.Sensor)[0]);
+    //console.log(Object.keys(ACTS.Action)[0]);
     GLOBAL.worldReady = await setupWorld(GLOBAL.x, GLOBAL.y, GLOBAL.startinglife);
     var endTime = performance.now();
     console.log(`World Ready after ${(endTime - GLOBAL.startTime) / 1000} seconds`);
@@ -93,63 +98,6 @@ function createLife(population) {
 
 }
 
-// definition of genes
-// SENSOR INPUTS
-// float (fp) between 0 and 1
-// weights (w) -4.0 to 4.0
-// sN = fp * w
-/*
-    Slr = pheromone gradient left-right
-    Sfd = pheromone gredient forward
-    Sg  = pheromone density
-    Age = age
-    Rnd = random input
-    Blr = blockage left-right
-    Osc = oscillator (set to 30cycles/gen?)
-    Bfd = blockage forward
-    Plr = population gradient left-right
-    
-    Pfd = population gradient forward
-    
-*/
-
-createEnum([
-    'LOC_X',                    // Lx = east/west world location
-    'LOC_Y',                    // Ly = north/south world location
-    'BOUNDARY_DIST_X',          // BDx = east/west border distance
-    'BOUNDARY_DIST',            // BD = nearest border distance
-    'BOUNDARY_DISY_Y',          // BDy = north/south border distance
-    'GENETIC_SIM_FWD',          // Gen = genetic similarity of fwd neighbour
-    'LAST_MOVE_DIR_X',          // LMx = last movement X
-    'LAST_MOVE_DIR_Y',          // LMy = last movement Y
-    'LONGPROBE_POP_FWD',        // LPf = population long-range forward
-    'LONGPROBE_BAR_FWD',        // LBf = blockage long-range forward
-    'POPULATION',               // Pop = population density
-]);
-
-// internal neuron =
-// iN = tanh(sum(inputs))
-// with will be a number between -1.0 and 1.0
-
-// similarly, action neurons
-// aN = tanh(sum(inputs)) between -1.0 and 1.0
-/*
-    LPD  - set long-probe distance
-    Kill - kill forward neighbour (default off)
-    OSC  - set oscillator period
-    SG   - emit pheromone
-    Res  - set responsiveness
-    Mfd  - move forward (same as previous)
-    Mrn  - move random
-    Mrv  - move reverse
-    MRL  - move left/right (+/-)
-    MX   - move east/west (+/-)
-    MY   - move north/south (+/-)
-*/
-
-
-
-
 function createGenome(glength) {
 
     let gnome = [];
@@ -191,16 +139,6 @@ function createGenome(glength) {
 
     return gnome;
     
-}
-
-const randomInt = (minimum, maximum) => {
-    return Math.floor((Math.random() * (maximum - minimum)) + minimum);
-}
-
-// this sets a specific bit to 1 or 0 
-const setBit = (n, bitIndex) => {
-    const bitMask = 1 << bitIndex;
-    return n | bitMask;
 }
 
 function updatePosition(id, new_x, new_y, old_x, old_y) {
@@ -314,24 +252,3 @@ class Life {
     }
 
 }
-
-// Utility Functions
-function createEnum(values) {
-    const enumObject = {};
-    for (const val of values) {
-      enumObject[val] = val;
-    }
-    return Object.freeze(enumObject);
-  }
-
-// SENSOR
-const SEN = new Uint8Array(1);
-const SENSOR = SEN[0] = 1; // always a source
-
-// ACTION
-const ACT = new Uint8Array(1);
-const ACTION = ACT[0] = 1; // always a sink
-
-// NEURON
-const NEU = new Uint8Array(1);
-const NEURON = NEU[0] = 0; // sink or source

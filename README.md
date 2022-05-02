@@ -33,3 +33,18 @@ bit 9       = sink (action) type
 bit 10 - 16 = sink ID
 
 bit 17 - 32 = 16-bit signed integer weight of the connection (divide this by 8000 or so) to get to a floating point value -4.0 -> 4.0
+
+
+#Other notes
+internal neuron =
+iN = tanh(sum(inputs))
+with will be a number between -1.0 and 1.0
+
+similarly, action neurons
+aN = tanh(sum(inputs)) between -1.0 and 1.0
+
+definition of genes
+SENSOR INPUTS
+float (fp) between 0 and 1
+weights (w) -4.0 to 4.0
+sN = fp * w
