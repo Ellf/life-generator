@@ -4,7 +4,7 @@
 // let w = 8;                 // height of the lifeform in pixels
 // let x = 64;                 // world x size
 // let y = 64;                 // world y size
-// let startinglife = 50;      // total number of live cells at the start
+// let startingLife = 50;      // total number of live cells at the start
 // let steps = 10;             // how many steps to run the simulation
 // let generation = 0;         // the generation of the simulation. We start at gen 0 and each new generation will be a more complicated gene pool.
 // let lifeform = [];
@@ -17,24 +17,34 @@
 // let yearCounter = 0;
 // let popCounter = 0;
 
-//export default { startTime, h, w, x, y, startinglife, steps, generation, lifeform, gen_len, mutation_rate, sensory_inputs, inner_neurons, action_outputs, worldReady, yearCounter, popCounter }
+//export default { startTime, h, w, x, y, startingLife, steps, generation, lifeform, gen_len, mutation_rate, sensory_inputs, inner_neurons, action_outputs, worldReady, yearCounter, popCounter }
 
 export default {
-    startTime: performance.now(),
-    h: 8,
-    w: 8,
-    x: 64,
-    y: 64,
-    startinglife:20,
-    steps: 10,
-    generation: 0,
-    lifeform: [],
-    gen_len: 4,
-    mutation_rate: 0.01,
-    sensory_inputs: 10,
-    inner_neurons: 2,
-    action_outputs: 10,
-    worldReady: false,
-    yearCounter: 0,
-    popCounter: 0,
+  startTime: performance.now(),
+  simulationSpeed: 50,
+  h: 8,
+  w: 8,
+  x: 64,
+  y: 64,
+  startingLife: 20,
+  selectedLifeformId: null,
+  steps: 1000,
+  generation: 0,
+  lifeform: [],
+  gen_len: 4,
+  mutation_rate: 0.01,
+  sensory_inputs: 10,
+  inner_neurons: 2,
+  action_outputs: 10,
+  worldReady: false,
+  yearCounter: 0,
+  popCounter: 0,
+  targetYear: 0,
+  isPaused: false,
+  initialEnergy: 200,
+  moveCost: 1,
+  generationLength: 500,
+  foodCount: 40,
+  foodEnergy: 100,
+  foodGrid: [],
 }

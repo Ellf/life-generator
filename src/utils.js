@@ -17,4 +17,15 @@ const setBit = (n, bitIndex) => {
     return n | bitMask;
 }
 
-export { createEnum, randomInt, setBit }
+function logToPage(message) {
+  const logOutput = document.getElementById('log-output');
+  if (logOutput) {
+    logOutput.insertAdjacentHTML('beforeend', `<p>> ${message}</p>`);
+    // Auto-scroll to the bottom
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+  // We can also keep logging to the browser console for debugging
+  console.log(message);
+}
+
+export { createEnum, randomInt, setBit, logToPage };
