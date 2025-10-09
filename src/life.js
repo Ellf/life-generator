@@ -4,24 +4,29 @@ import ACTS from './action.js';
 import { randomInt, setBit } from './utils.js';
 
 export default class Life {
-  constructor(id, genome_length, sensory_inputs, inner_neurons, action_outputs, generation = 0) {
-    this.alive = true; // always alive at the start
+  constructor(id, generation = 0, genome = null) {
+    this.alive = true;
     this.energy = GLOBAL.initialEnergy;
-    this.generation = generation;
+    this.age = 0;
     this.id = id;
-    this.pos_x =  Math.floor(Math.random() * GLOBAL.x );
-    this.pos_y = Math.floor(Math.random() * GLOBAL.y );
+    this.generation = generation;
+    this.pos_x = randomInt(0, GLOBAL.x);
+    this.pos_y = randomInt(0, GLOBAL.y);
     this.old_x = this.pos_x;
     this.old_y = this.pos_y;
-    this.genome_length = GLOBAL.genome_length;
+    this.color = [150, 150, 200];
+    this.direction = randomInt(0, 4);
+    this.lastAction = 'None';
+
+    // Core Genetic Properties
+    this.genome_length = GLOBAL.gen_len;
     this.sensory_inputs = GLOBAL.sensory_inputs;
     this.inner_neurons = GLOBAL.inner_neurons;
     this.action_outputs = GLOBAL.action_outputs;
-    this.color =  [150, 150, 200]; //[Math.floor(Math.random() * 255), Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)]
-    this.age = 0; // always start at age 0
-    this.genome = createGenome(genome_length);
+
+    // If a genome is passed in, use it. Otherwise, create a new random one.
+    this.genome = genome ? genome : createGenome(this.genome_length);
     this.brain = this.genome.map(gene => parseGene(gene));
-    this.direction = randomInt(0, 4);
   }
 
   getSensorValues(occupiedCells) {
@@ -177,6 +182,7 @@ export default class Life {
   performAction(actionId) {
     const actionNames = Object.keys(ACTS.Action);
     const actionName = actionNames[actionId];
+    this.lastAction = actionName;
 
     switch (actionName) {
       case 'MOVE_EAST': this.moveEast(); break;
@@ -207,81 +213,63 @@ export default class Life {
     }
   }
 
-  // move east
+  // In src/life.js, inside the Life class
+
+  _move(dx, dy, direction) {
+    const newX = this.pos_x + dx;
+    const newY = this.pos_y + dy;
+
+    // 1. Check if the move is within world boundaries.
+    if (newX < 0 || newX >= GLOBAL.x || newY < 0 || newY >= GLOBAL.y) {
+      return false; // Can't move, hit a wall.
+    }
+
+    // 2. Pay the energy cost.
+    this.energy -= GLOBAL.moveCost;
+
+    // 3. Update the position in memory.
+    this.direction = direction;
+    this.old_x = this.pos_x;
+    this.old_y = this.pos_y;
+    this.pos_x = newX;
+    this.pos_y = newY;
+
+    // 4. Update the visual position on the grid.
+    updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
+
+    // 5. Check for death after the move.
+    if (this.energy <= 0) {
+      this.alive = false;
+      this.color = [200, 50, 50]; // Red color for dead
+
+      const deadCell = document.querySelector(`.world [data-xy='${this.pos_x}-${this.pos_y}']`);
+      if (deadCell) {
+        deadCell.style.background = `rgb(${this.color[0]}, ${this.color[1]}, ${this.color[2]})`;
+        deadCell.classList.remove('live-cell');
+        deadCell.classList.add('dead-cell');
+      }
+      return false; // Move was fatal.
+    }
+
+    // 6. If it survived, check for food.
+    this.checkForFood();
+    return true; // Move was successful.
+  }
+
   moveEast() {
-    if (this.pos_x < (GLOBAL.x - 1) ) {
-      this.energy -= GLOBAL.moveCost; // It costs energy to move
-      if (this.energy <= 0) {
-        this.alive = false;
-        return false; // Stop the move if it dies
-      }
-      this.direction = 1;
-      this.old_x = this.pos_x;
-      this.old_y = this.pos_y;
-      this.pos_x += 1;
-      updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
-      this.checkForFood();
-      return true;
-    } else {
-      return false;
-    }
+    return this._move(1, 0, 1); // dx=1, dy=0, direction=East(1)
   }
-  // move west
+
   moveWest() {
-    if (this.pos_x > 0) {
-      this.energy -= GLOBAL.moveCost; // It costs energy to move
-      if (this.energy <= 0) {
-        this.alive = false;
-        return false; // Stop the move if it dies
-      }
-      this.direction = 3;
-      this.old_x = this.pos_x;
-      this.old_y = this.pos_y;
-      this.pos_x -= 1;
-      updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
-      this.checkForFood();
-      return true;
-    } else {
-      return false;
-    }
+    return this._move(-1, 0, 3); // dx=-1, dy=0, direction=West(3)
   }
-  // move north
+
   moveNorth() {
-    if (this.pos_y > 0) {
-      this.energy -= GLOBAL.moveCost; // It costs energy to move
-      if (this.energy <= 0) {
-        this.alive = false;
-        return false; // Stop the move if it dies
-      }
-      this.direction = 0;
-      this.old_y = this.pos_y;
-      this.old_x = this.pos_x;
-      this.pos_y -= 1;
-      updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
-      this.checkForFood();
-      return true;
-    } else {
-      return false;
-    }
+    return this._move(0, -1, 0); // dx=0, dy=-1, direction=North(0)
   }
-  // move south
+
   moveSouth() {
-    if (this.pos_y < (GLOBAL.y - 1) ) {
-      this.energy -= GLOBAL.moveCost; // It costs energy to move
-      if (this.energy <= 0) {
-        this.alive = false;
-        return false; // Stop the move if it dies
-      }
-      this.direction = 2;
-      this.old_y = this.pos_y;
-      this.old_x = this.pos_x;
-      this.pos_y += 1;
-      updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
-      this.checkForFood();
-      return true;
-    } else {
-      return false
-    }
+    return this._move(0, 1, 2); // dx=0, dy=1, direction=South(2)
   }
 
   checkForFood() {

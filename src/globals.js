@@ -41,7 +41,7 @@ export default {
   popCounter: 0,
   targetYear: 0,
   isPaused: false,
-  initialEnergy: 200,
+  initialEnergy: 500,
   moveCost: 1,
   generationLength: 500,
   foodCount: 40,

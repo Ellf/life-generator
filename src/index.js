@@ -51,6 +51,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  const tabLinks = document.querySelectorAll('.tab-link');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      // Remove active class from all links and content
+      tabLinks.forEach(item => item.classList.remove('active'));
+      tabContents.forEach(item => item.classList.remove('active'));
+
+      // Add active class to the clicked link and corresponding content
+      const tabId = link.dataset.tab;
+      const correspondingTab = document.getElementById(tabId);
+
+      link.classList.add('active');
+      correspondingTab.classList.add('active');
+    });
+  });
+
   // Continue button event listener
   document.getElementById('continueSimulation').addEventListener('click', () => {
     logToPage(`Continuing for ${GLOBAL.steps} more steps...`);
@@ -60,12 +78,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     GLOBAL.isPaused = false;
   });
 
-  // Event listener on button to restart simulation
-  document.getElementById('regenerateWorld').addEventListener('click', () => {
-    logToPage('creating new world');
-    GLOBAL.worldReady = setupWorld(GLOBAL.x, GLOBAL.y, GLOBAL.startingLife);
-    logToPage(GLOBAL.worldReady);
-    startSimulation(GLOBAL.steps);
+  const tableBody = document.getElementById('lifeform-table-body');
+  tableBody.addEventListener('click', (event) => {
+    if (event.target.classList.contains('select-lifeform-btn')) {
+      const lifeformId = event.target.dataset.id;
+      console.log(lifeformId);
+      const lifeformCell = document.querySelector(`.world [data-id='${lifeformId}']`);
+      if (lifeformCell) {
+        getClicked(lifeformCell);
+        lifeformCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
   });
 
   // Use event delegation for clicks on dynamically created life cells
@@ -98,9 +121,16 @@ export function updateSelectedLifeformUI() {
   const posYSpan = document.querySelector('#posy span');
   const energySpan = document.querySelector('#energy span');
   const brainOutput = document.getElementById('brain-output');
+  const genomeRawOutput = document.getElementById('genome-raw-output');
+
+  const genomeLengthSpan = document.querySelector('#genome-length span');
+  const sensoryInputsSpan = document.querySelector('#sensory-inputs span');
+  const innerNeuronsSpan = document.querySelector('#inner-neurons span');
+  const actionOutputsSpan = document.querySelector('#action-outputs span');
 
   // Clear brain display initially
   if (brainOutput) brainOutput.innerHTML = '';
+  if (genomeRawOutput) genomeRawOutput.innerHTML = '<strong>Raw Genome:</strong> <span>-</span>';
 
   if (id === null || !GLOBAL.lifeform[id]) {
     // Clear all fields if no lifeform is selected
@@ -108,10 +138,13 @@ export function updateSelectedLifeformUI() {
     posXSpan.textContent = '-';
     posYSpan.textContent = '-';
     energySpan.textContent = '-';
+    genomeLengthSpan.textContent = '-';
+    sensoryInputsSpan.textContent = '-';
+    innerNeuronsSpan.textContent = '-';
+    actionOutputsSpan.textContent = '-';
     return;
   }
 
-  // --- THE FIX: Define the 'lifeform' variable ---
   const lifeform = GLOBAL.lifeform[id];
 
   // Update the text content of the elements
@@ -119,6 +152,16 @@ export function updateSelectedLifeformUI() {
   posXSpan.textContent = lifeform.pos_x;
   posYSpan.textContent = lifeform.pos_y;
   energySpan.textContent = lifeform.alive ? lifeform.energy : 'Dead';
+  genomeLengthSpan.textContent = lifeform.genome_length;
+  sensoryInputsSpan.textContent = lifeform.sensory_inputs;
+  innerNeuronsSpan.textContent = lifeform.inner_neurons;
+  actionOutputsSpan.textContent = lifeform.action_outputs;
+
+  if (genomeRawOutput && lifeform.genome) {
+    // Join the array of hex strings with a space for readability
+    const genomeString = lifeform.genome.join(' ');
+    genomeRawOutput.innerHTML = `<strong>Raw Genome:</strong> <span>${genomeString}</span>`;
+  }
 
   // Update the rest of the UI (like the brain display)
   if (brainOutput && lifeform.brain) {
@@ -145,7 +188,7 @@ async function setupWorld(x, y, startingLife, isNewGeneration = false) {
     document.getElementById('generation-value').textContent = GLOBAL.generation;
     // Create the new random population directly in setupWorld
     for (let g = 0; g < startingLife; g++) {
-      GLOBAL.lifeform[g] = new Life(g, GLOBAL.gen_len, GLOBAL.sensory_inputs, GLOBAL.inner_neurons, GLOBAL.action_outputs, GLOBAL.generation);
+      GLOBAL.lifeform[g] = new Life(g, GLOBAL.generation);
     }
   }
 
@@ -218,38 +261,53 @@ function spawnFood() {
       GLOBAL.foodGrid.push(pos);
       const foodCell = document.querySelector(`.world [data-xy='${pos}']`);
       if (foodCell) {
-        logToPage(`Adding food cell to ${pos}`);
         foodCell.classList.add('food-cell');
       }
     }
   }
 }
 
+// In src/index.js
 export function updateLifeformTable() {
   const tableBody = document.getElementById('lifeform-table-body');
   if (!tableBody) return;
 
-  let tableHtml = '';
-  const directions = ['N', 'E', 'S', 'W']; // For converting direction number to letter
+  const directions = ['N', 'E', 'S', 'W'];
 
   for (const lifeform of GLOBAL.lifeform) {
+    // Try to find an existing row for this lifeform
+    let row = tableBody.querySelector(`tr[data-id='${lifeform.id}']`);
+
+    // If no row exists, create it and its cells
+    if (!row) {
+      row = document.createElement('tr');
+      row.setAttribute('data-id', lifeform.id);
+      row.innerHTML = `
+                <td>${lifeform.id}</td>
+                <td>${lifeform.generation}</td>
+                <td class="status"></td>
+                <td class="position"></td>
+                <td class="energy"></td>
+                <td class="age"></td>
+                <td class="direction"></td>
+                <td class="action"></td>
+                <td><button class="select-lifeform-btn" data-id="${lifeform.id}">Select</button></td>
+            `;
+      tableBody.appendChild(row);
+    }
+
+    // Now, update the content of the cells that change each year
     const status = lifeform.alive ? 'Alive' : 'Dead';
     const position = `${lifeform.pos_x}, ${lifeform.pos_y}`;
     const direction = directions[lifeform.direction];
 
-    tableHtml += `
-            <tr>
-                <td>${lifeform.id}</td>
-                <td>${lifeform.generation}</td>
-                <td>${status}</td>
-                <td>${position}</td>
-                <td>${lifeform.energy}</td>
-                <td>${lifeform.age}</td>
-                <td>${direction}</td>
-            </tr>
-        `;
+    row.querySelector('.status').textContent = status;
+    row.querySelector('.position').textContent = position;
+    row.querySelector('.energy').textContent = lifeform.energy;
+    row.querySelector('.age').textContent = lifeform.age;
+    row.querySelector('.direction').textContent = direction;
+    row.querySelector('.action').textContent = lifeform.lastAction || '-';
   }
-  tableBody.innerHTML = tableHtml;
 }
 
 export async function createNewGeneration() {
@@ -290,9 +348,7 @@ export async function createNewGeneration() {
       return gene;
     });
 
-    const child = new Life(i, newGenome.length, GLOBAL.sensory_inputs, GLOBAL.inner_neurons, GLOBAL.action_outputs, GLOBAL.generation);
-    child.genome = newGenome;
-    child.brain = child.genome.map(gene => parseGene(gene));
+    const child = new Life(i, GLOBAL.generation, newGenome);
     newLifeforms.push(child);
   }
 

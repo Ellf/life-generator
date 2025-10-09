@@ -31,6 +31,12 @@ function runStep() {
     currentLifeform.energy -= 1;
     if (currentLifeform.energy <= 0) {
       currentLifeform.alive = false;
+      currentLifeform.color = [200, 50, 50]; // Change color to a dim red
+      const deadCell = document.querySelector(`.world [data-id='${currentLifeform.id}']`);
+      if (deadCell) {
+        deadCell.style.background = `rgb(${currentLifeform.color[0]}, ${currentLifeform.color[1]}, ${currentLifeform.color[2]})`;
+        deadCell.classList.add('dead-cell'); // Add a class for styling
+      }
       continue; // Lifeform dies, skip to the next one
     }
 
