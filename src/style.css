@@ -217,9 +217,25 @@ button {
   margin: 0 0 5px 0;
 }
 
+.life-action-log-card {
+    background-color: var(--panel-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    max-height: 180px;
+    font-size: 0.95em;
+    color: #c3e88d;
+}
+#life-action-log {
+    height: 150px;
+    overflow-y: scroll;
+    font-family: 'Courier New', Courier, monospace;
+}
+
 /* --- Table Styles --- */
 .table-wrapper {
-  max-height: 600px; /* Adjust height as needed */
+  max-height: 850px; /* Adjust height as needed */
   overflow-y: auto;
   border: 1px solid var(--border-color);
   border-radius: 8px;

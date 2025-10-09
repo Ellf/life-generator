@@ -20,8 +20,8 @@ let Sensor = createEnum([
     'BARRIER_FWD',              // Bfd = blockage forward
     'BARRIER_LR',               // Blr = blockage left-right
     'RANDOM',                   // Rnd = random input
-    'SIGNAL0',                  // Sfd = pheromone gredient forward
-    'SIGNAL0_FWD',              // Sg  = pheromone density
+    'SIGNAL0',                  // Sfd = pheromone gradient forward
+    'SIGNAL0_FOOD',              // Sg  = food forward
     'SIGNAL0_LR',               // Slr = pheromone gradient left-right
 ]);
 

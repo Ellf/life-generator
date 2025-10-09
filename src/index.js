@@ -127,6 +127,7 @@ export function updateSelectedLifeformUI() {
   const sensoryInputsSpan = document.querySelector('#sensory-inputs span');
   const innerNeuronsSpan = document.querySelector('#inner-neurons span');
   const actionOutputsSpan = document.querySelector('#action-outputs span');
+  const logDiv = document.getElementById('life-action-log');
 
   // Clear brain display initially
   if (brainOutput) brainOutput.innerHTML = '';
@@ -146,6 +147,14 @@ export function updateSelectedLifeformUI() {
   }
 
   const lifeform = GLOBAL.lifeform[id];
+  
+  if (logDiv) {
+    if (lifeform && lifeform.actionLog.length) {
+      logDiv.innerHTML = lifeform.actionLog.slice(-30).reverse().map(e => `<div>${e}</div>`).join('');
+    } else {
+      logDiv.innerHTML = '<em>No events yet.</em>';
+    }
+  }
 
   // Update the text content of the elements
   idSpan.textContent = id;

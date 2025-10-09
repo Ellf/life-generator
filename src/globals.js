@@ -26,7 +26,7 @@ export default {
   w: 8,
   x: 64,
   y: 64,
-  startingLife: 20,
+  startingLife: 100,
   selectedLifeformId: null,
   steps: 1000,
   generation: 0,

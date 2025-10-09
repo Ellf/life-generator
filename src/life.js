@@ -17,6 +17,7 @@ export default class Life {
     this.color = [150, 150, 200];
     this.direction = randomInt(0, 4);
     this.lastAction = 'None';
+    this.actionLog = [];
 
     // Core Genetic Properties
     this.genome_length = GLOBAL.gen_len;
@@ -98,8 +99,8 @@ export default class Life {
       sensorValues[popFwdIndex] = occupiedCells.has(`${fwdY}-${fwdX}`) ? 1.0 : 0.0;
     }
 
-    // --- Add a Food Sensor (repurposing SIGNAL0_FWD) ---
-    const foodFwdIndex = sensorNames.indexOf('SIGNAL0_FWD');
+    // --- Add a Food Sensor ---
+    const foodFwdIndex = sensorNames.indexOf('SIGNAL0_FOOD');
     if (foodFwdIndex !== -1) {
       let closestFoodDist = Infinity;
       let foodInSight = 0.0;
@@ -175,36 +176,50 @@ export default class Life {
         chosenActionId = i;
       }
     }
-
-    return chosenActionId; // This is the ID of the action to perform
+    
+    // Only return a valid action if it has a positive activation
+    // or at least exceeds a threshold
+    if (chosenActionId !== -1 && maxOutput > 0.0) {
+      return chosenActionId;
+    }
+    
+    return -1; // No action chosen
   }
 
-  performAction(actionId) {
+  performAction(actionId, occupiedCells) {
+    // Check if no action was chosen
+    if (actionId === -1) {
+      this.lastAction = 'None';
+      return;
+    }
     const actionNames = Object.keys(ACTS.Action);
     const actionName = actionNames[actionId];
     this.lastAction = actionName;
+    
+    this.actionLog.push(`Action: ${actionName} @ (${this.pos_x},${this.pos_y}) [${this.energy}]`);
+    if (this.actionLog.length > 100) this.actionLog.shift();
 
     switch (actionName) {
-      case 'MOVE_EAST': this.moveEast(); break;
-      case 'MOVE_WEST': this.moveWest(); break;
-      case 'MOVE_NORTH': this.moveNorth(); break;
-      case 'MOVE_SOUTH': this.moveSouth(); break;
+      case 'MOVE_EAST': this.moveEast(occupiedCells); break;
+      case 'MOVE_WEST': this.moveWest(occupiedCells); break;
+      case 'MOVE_NORTH': this.moveNorth(occupiedCells); break;
+      case 'MOVE_SOUTH': this.moveSouth(occupiedCells); break;
 
       case 'MOVE_FORWARD':
         // Move in the direction the lifeform is currently facing
-        if (this.direction === 0) this.moveNorth();
-        else if (this.direction === 1) this.moveEast();
-        else if (this.direction === 2) this.moveSouth();
-        else if (this.direction === 3) this.moveWest();
+        if (this.direction === 0) this.moveNorth(occupiedCells);
+        else if (this.direction === 1) this.moveEast(occupiedCells);
+        else if (this.direction === 2) this.moveSouth(occupiedCells);
+        else if (this.direction === 3) this.moveWest(occupiedCells);
         break;
 
       case 'MOVE_RANDOM':
         // Pick a random direction to move
         const randDir = randomInt(0, 4);
-        if (randDir === 0) this.moveNorth();
-        else if (randDir === 1) this.moveEast();
-        else if (randDir === 2) this.moveSouth();
-        else if (randDir === 3) this.moveWest();
+        if (randDir === 0) this.moveNorth(occupiedCells);
+        else if (randDir === 1) this.moveEast(occupiedCells);
+        else if (randDir === 2) this.moveSouth(occupiedCells);
+        else if (randDir === 3) this.moveWest(occupiedCells);
         break;
 
       default:
@@ -213,9 +228,7 @@ export default class Life {
     }
   }
 
-  // In src/life.js, inside the Life class
-
-  _move(dx, dy, direction) {
+  _move(dx, dy, direction, occupiedCells) {
     const newX = this.pos_x + dx;
     const newY = this.pos_y + dy;
 
@@ -223,23 +236,33 @@ export default class Life {
     if (newX < 0 || newX >= GLOBAL.x || newY < 0 || newY >= GLOBAL.y) {
       return false; // Can't move, hit a wall.
     }
+    
+    // 2. Check for other lifeform
+    if (occupiedCells && occupiedCells.has(`${newY}-${newX}`)) {
+      // cell blocked by another lifeform
+      this.actionLog.push("Blocked by lifeform at (" + newX + "," + newY + ")");
+      if (this.actionLog.length > 100) this.actionLog.shift();
+      return false;
+    }
 
-    // 2. Pay the energy cost.
+    // 3. Pay the energy cost.
     this.energy -= GLOBAL.moveCost;
 
-    // 3. Update the position in memory.
+    // 4. Update the position in memory.
     this.direction = direction;
     this.old_x = this.pos_x;
     this.old_y = this.pos_y;
     this.pos_x = newX;
     this.pos_y = newY;
 
-    // 4. Update the visual position on the grid.
+    // 5. Update the visual position on the grid.
     updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
 
-    // 5. Check for death after the move.
+    // 6. Check for death after the move.
     if (this.energy <= 0) {
       this.alive = false;
+      this.actionLog.push("Died at (" + this.pos_x + "," + this.pos_y + ") [age=" + this.age + "]");
+      if (this.actionLog.length > 100) this.actionLog.shift()
       this.color = [200, 50, 50]; // Red color for dead
 
       const deadCell = document.querySelector(`.world [data-xy='${this.pos_x}-${this.pos_y}']`);
@@ -251,33 +274,35 @@ export default class Life {
       return false; // Move was fatal.
     }
 
-    // 6. If it survived, check for food.
+    // 7. If it survived, check for food.
     this.checkForFood();
-    return true; // Move was successful.
+    return true; // The move was successful.
   }
 
-  moveEast() {
-    return this._move(1, 0, 1); // dx=1, dy=0, direction=East(1)
+  moveEast(occupiedCells) {
+    return this._move(1, 0, 1, occupiedCells); // dx=1, dy=0, direction=East(1)
   }
 
-  moveWest() {
-    return this._move(-1, 0, 3); // dx=-1, dy=0, direction=West(3)
+  moveWest(occupiedCells) {
+    return this._move(-1, 0, 3, occupiedCells); // dx=-1, dy=0, direction=West(3)
   }
 
-  moveNorth() {
-    return this._move(0, -1, 0); // dx=0, dy=-1, direction=North(0)
+  moveNorth(occupiedCells) {
+    return this._move(0, -1, 0, occupiedCells); // dx=0, dy=-1, direction=North(0)
   }
 
-  moveSouth() {
-    return this._move(0, 1, 2); // dx=0, dy=1, direction=South(2)
+  moveSouth(occupiedCells) {
+    return this._move(0, 1, 2, occupiedCells); // dx=0, dy=1, direction=South(2)
   }
 
   checkForFood() {
-    const currentPos = `${this.pos_y}-${this.pos_x}`;
+    const currentPos = `${this.pos_x}-${this.pos_y}`;
     const foodIndex = GLOBAL.foodGrid.indexOf(currentPos);
 
     if (foodIndex > -1) {
       this.energy += GLOBAL.foodEnergy;
+      this.actionLog.push("Ate food (+energy) @ (" + this.pos_x + "," + this.pos_y + ")");
+      if (this.actionLog.length > 100) this.actionLog.shift()
       GLOBAL.foodGrid.splice(foodIndex, 1); // Remove food from the data array
 
       // Remove the food visual from the grid
