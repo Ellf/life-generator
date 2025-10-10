@@ -14,7 +14,6 @@ export default class Life {
     this.pos_y = randomInt(0, GLOBAL.y);
     this.old_x = this.pos_x;
     this.old_y = this.pos_y;
-    this.color = [150, 150, 200];
     this.direction = randomInt(0, 4);
     this.lastAction = 'None';
     this.actionLog = [];
@@ -28,6 +27,7 @@ export default class Life {
     // If a genome is passed in, use it. Otherwise, create a new random one.
     this.genome = genome ? genome : createGenome(this.genome_length);
     this.brain = this.genome.map(gene => parseGene(gene));
+    this.color = genomeToColor(this.genome);
   }
 
   getSensorValues(occupiedCells) {
@@ -194,6 +194,7 @@ export default class Life {
     }
     const actionNames = Object.keys(ACTS.Action);
     const actionName = actionNames[actionId];
+    const actionValues = new Array(Object.keys(ACTS.Action).length).fill(0);
     this.lastAction = actionName;
     
     this.actionLog.push(`Action: ${actionName} @ (${this.pos_x},${this.pos_y}) [${this.energy}]`);
@@ -204,6 +205,69 @@ export default class Life {
       case 'MOVE_WEST': this.moveWest(occupiedCells); break;
       case 'MOVE_NORTH': this.moveNorth(occupiedCells); break;
       case 'MOVE_SOUTH': this.moveSouth(occupiedCells); break;
+      
+      case 'MOVE_LEFT':
+        // if facing North, move west
+        if (this.direction === 0) this.moveWest(occupiedCells);
+        else if (this.direction === 1) this.moveNorth(occupiedCells);
+        else if (this.direction === 2) this.moveEast(occupiedCells);
+        else if (this.direction === 3) this.moveSouth(occupiedCells);
+        break;
+        
+      case 'MOVE_RIGHT':
+        // if facing North, move east
+        if (this.direction === 0) this.moveEast(occupiedCells);
+        else if (this.direction === 1) this.moveSouth(occupiedCells);
+        else if (this.direction === 3) this.moveWest(occupiedCells);
+        else if (this.direction === 4) this.moveNorth(occupiedCells);
+        break;
+      
+      case 'MOVE_RL': {
+        // direction: 0=North, 1=East, 2=South, 3=West
+        // Perpendicular to current direction, right = +1.0, left = -1.0
+        // Assume actionValues is in scope
+        const level = actionValues[actionNames.indexOf('MOVE_RL')]; // tanh output [-1,1]
+        let dx = 0, dy = 0;
+        switch (this.direction) {
+          case 0:  // North, right is East
+            dx = Math.round(level);
+            break;
+          case 1:  // East, right is South
+            dy = Math.round(level);
+            break;
+          case 2:  // South, right is West
+            dx = -Math.round(level);
+            break;
+          case 3:  // West, right is North
+            dy = -Math.round(level);
+            break;
+        }
+        // Only move if not zero (could include magnitude if desired)
+        if (dx !== 0 || dy !== 0) this._move(dx, dy, this.direction, occupiedCells);
+        break;
+      }
+      
+      case 'MOVE_X': {
+        const level = actionValues[actionNames.indexOf('MOVE_X')]; // tanh output [-1,1]
+        const dx = Math.round(level); // +1, 0, -1
+        if (dx !== 0) this._move(dx, 0, this.direction, occupiedCells);
+        break;
+      }
+      
+      case 'MOVE_Y': {
+        const level = actionValues[actionNames.indexOf('MOVE_Y')]; // tanh output [-1,1]
+        const dy = Math.round(level); // +1, 0, -1
+        if (dy !== 0) this._move(0, dy, this.direction, occupiedCells);
+        break;
+      }
+        
+      case 'MOVE_REVERSE':
+        // if facing north, move south
+        if (this.direction === 0) this.moveSouth(occupiedCells);
+        else if (this.direction === 1) this.moveWest(occupiedCells);
+        else if (this.direction === 3) this.moveNorth(occupiedCells);
+        else if (this.direction === 4) this.moveEast(occupiedCells);
+        break;
 
       case 'MOVE_FORWARD':
         // Move in the direction the lifeform is currently facing
@@ -338,32 +402,32 @@ export default class Life {
 export function createGenome(glength) {
   let gnome = [];
   for (let g = 0; g < glength; g+=1) {
-    var sourceType = 0;
-    var sinkType = 0;
-
+    let sourceType = 0;
+    let sinkType = 0;
+    
     // BIT: 1
-    var sT = randomInt(0, 2);
+    const sT = randomInt(0, 2);
     if (sT === 1) {
       sourceType = (setBit(sourceType, 7));
     } else {
       sourceType = 0;
     }
-    // BIT 2 - 8
-    var sourceID = randomInt(0, 127);
-    // BIT 1 - 8
-    var sTandsID = sourceType | sourceID;
-    var siT = randomInt(0, 2);
+    // BIT 2-8
+    const sourceID = randomInt(0, 127);
+    // BIT 1-8
+    const sTandsID = sourceType | sourceID;
+    const siT = randomInt(0, 2);
     if (siT === 1) {
       sinkType = (setBit(sinkType, 7))
     } else {
       sinkType = 0;
     }
-    var sinkID = randomInt(0, 127);
-    var siTandsiID = sinkType | sinkID;
-
-    var weight = randomInt(0, 32767).toString(2); //16 bit
-    var gString = `${sTandsID.toString(2).padStart(8, '0')}${siTandsiID.toString(2).padStart(8, '0')}${weight}`;
-    var geneHex = parseInt(gString, 2).toString(16).toUpperCase();
+    const sinkID = randomInt(0, 127);
+    const siTandsiID = sinkType | sinkID;
+    
+    const weight = randomInt(0, 32767).toString(2); //16 bit
+    const gString = `${sTandsID.toString(2).padStart(8, '0')}${siTandsiID.toString(2).padStart(8, '0')}${weight}`;
+    const geneHex = parseInt(gString, 2).toString(16).toUpperCase();
     gnome[g] = geneHex;
   }
   return gnome;
@@ -388,7 +452,7 @@ function updatePosition(id, new_x, new_y, old_x, old_y) {
       newCell.classList.add('live-cell');
       newCell.dataset.id = id;
 
-      if (id == GLOBAL.selectedLifeformId) {
+      if (id === GLOBAL.selectedLifeformId) {
         newCell.classList.add('selected-cell');
       }
     }
@@ -403,11 +467,11 @@ export function parseGene(geneHex) {
   const gene = parseInt(geneHex, 16);
 
   // Use bitwise AND and right shifts to extract the parts of the gene
-  const sourceType = (gene >> 31) & 1;          // Bit 32 (or 31 in 0-indexing)
-  let sourceId   = (gene >> 24) & 0x7F;       // Bits 25-31
-  const sinkType   = (gene >> 23) & 1;          // Bit 24
-  let sinkId     = (gene >> 16) & 0x7F;       // Bits 17-23
-  let weight       = gene & 0xFFFF;             // Last 16 bits for the weight
+  const sourceType = (gene >> 31) & 1;     // Bit 32 (or 31 in 0-indexing)
+  let sourceId     = (gene >> 24) & 0x7F;  // Bits 25-31
+  const sinkType   = (gene >> 23) & 1;     // Bit 24
+  let sinkId       = (gene >> 16) & 0x7F;  // Bits 17-23
+  let weight       = gene & 0xFFFF;        // Last 16 bits for the weight
 
   const numSensors = Object.keys(SENS.Sensor).length;
   const numActions = Object.keys(ACTS.Action).length;
@@ -439,4 +503,23 @@ export function parseGene(geneHex) {
     sinkId,
     weight: normalizedWeight,
   };
+}
+
+function genomeToColor(genome) {
+  // Concatenate all gene hex strings into one long string
+  const genomeStr = genome.join('');
+  
+  // Use the first 6 hex chars for RGB, padding if needed
+  const padded = genomeStr.padEnd(6, '0');
+  const r = parseInt(padded.slice(0, 2), 16);
+  const g = parseInt(padded.slice(2, 4), 16);
+  const b = parseInt(padded.slice(4, 6), 16);
+  
+  // Optionally, boost brightness for visual separation
+  const boost = 80;
+  return [
+    Math.min(255, r + boost),
+    Math.min(255, g + boost),
+    Math.min(255, b + boost)
+  ];
 }

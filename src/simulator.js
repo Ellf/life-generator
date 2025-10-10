@@ -1,11 +1,9 @@
 import GLOBAL from './globals.js';
 import {updateSelectedLifeformUI, createNewGeneration, updateLifeformTable} from './index.js';
 import {logToPage} from "./utils";
+import { drawWorld } from './index.js';
 
 let simulationTimeout = null;
-const SIMULATION_SPEED = 200; // milliseconds per "year". Increase for slower, decrease for faster.
-
-// In src/simulator.js
 
 function runStep() {
   if (GLOBAL.yearCounter >= GLOBAL.targetYear || GLOBAL.isPaused) {
@@ -37,6 +35,7 @@ function runStep() {
         deadCell.style.background = `rgb(${currentLifeform.color[0]}, ${currentLifeform.color[1]}, ${currentLifeform.color[2]})`;
         deadCell.classList.add('dead-cell'); // Add a class for styling
       }
+      drawWorld();
       continue; // Lifeform dies, skip to the next one
     }
 
@@ -48,6 +47,8 @@ function runStep() {
   // 3. Update UI
   GLOBAL.yearCounter += 1;
   document.querySelector('#year-value').textContent = GLOBAL.yearCounter;
+  document.getElementById('population-value').textContent =
+    GLOBAL.lifeform.filter(lf => lf.alive).length;
   updateSelectedLifeformUI();
   updateLifeformTable();
 
@@ -60,6 +61,7 @@ function runStep() {
   }
 
   // 5. Schedule the NEXT step
+  drawWorld();
   simulationTimeout = setTimeout(runStep, GLOBAL.simulationSpeed);
 }
 

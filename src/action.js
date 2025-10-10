@@ -19,7 +19,7 @@ let Action = createEnum([
     'MOVE_RIGHT',               // MRL  - move left/right (+/-)
     'MOVE_REVERSE',             // Mrv  - move reverse
     'NUM_ACTIONS',          // <!-- end of active actions
-    'KILL_FORWARD'              // Kill - kill forward neighbour (default off)
+    'KILL_FORWARD'          // Kill - kill forward neighbour (default off)
 ]);
 
 export default {

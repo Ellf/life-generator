@@ -1,50 +1,92 @@
-# Lifeform Generator - a JavaScript Experiment
-Just some fun with JavaScript and a genetic type life simulator idea.
+# Lifeform Generator
 
-I'm still learning JavaScript and certain areas just never seem to become commonplace in my day-to-day work so, I thought of this being a way to get out of my JS comfort zone and learn some of the concepts that I've typically shied away from.
+A JavaScript-based playground for artificial life and emergent behaviors, inspired by digital evolution concepts.
 
-# Thanks
-Thanks to Dave Miller's YouTube video and github repository for providing the inspiration and variable names along with many other ideas for this learning project.
+This experiment simulates tiny lifeforms in a grid world, where each organism has a genome (digital DNA), a set of simulated "neurons", and must use various sensors to move, eat, and survive. Over multiple generations, genomes can mutate, leading to the emergence of new behaviors.
 
-https://github.com/davidrmiller/biosim4
+---
 
-# General Notes from the video and my own thoughts.
-* self-replication
-* blueprint -- genome
-* inherit blueprint
-* mutations
-* selection, natural or otherwise
+## Features
 
-Genomes are collection of genes:
+- **Lifeforms with Digital Genomes**  
+  Each organism has a genome made of binary "genes", encoding how its neural network wiring connects sensors to actions.
+- **Ecosystem Simulation**  
+  Organisms roam a 2D world, searching for food and avoiding boundaries or obstacles.
+- **Neural Network-based Decisions**  
+  Every turn, a lifeform gathers sensory data (location, age, food presence, neighbors, barriers, random number, etc.), processes it through a neural net, and chooses its next action.
+- **No Overlapping Life**  
+  Lifeforms can't occupy the same cell. Movement checks and respects occupied locations.
+- **Action, Event, and Lifeform Logs**  
+  Inspect per-lifeform action history/events directly in the UI for tracking/debugging.
+- **Automatic Generation Cycling**  
+  Simulated years pass, creatures age, die, reproduce, and mutations occur. Generations restart with the fittest survivors' children.
 
-one gene = 8-hexadecimal digits ########
+---
 
-32 binary bits of data
+## Sensors
 
-f 1 3 5 1 f e 3
+Sensors feed inputs to each lifeform's neural net, including:
+- Position in the world (X, Y)
+- Proximity to boundaries
+- Population and food nearby (forward/left/right)
+- Blockages/barriers detected
+- Age, random noise, custom signals
 
-e.g.
-[1|1|1|1] [0|0|0|1] [0|0|1|1] [0|1|0|1] 
-[0|0|0|1] [1|1|1|1] [1|1|1|0] [0|0|1|1]
+---
 
-bit 1       = source type [input sensory or internal neuron]
-bit 2 - 8   = source ID (take modulo of number of neurons to find out which one it refers to????)
-bit 9       = sink (action) type
-bit 10 - 16 = sink ID
+## Actions
 
-bit 17 - 32 = 16-bit signed integer weight of the connection (divide this by 8000 or so) to get to a floating point value -4.0 -> 4.0
+Lifeforms can:
+- Move in cardinal directions (N, S, E, W)
+- Move forward (current direction), randomly, or with custom behaviors
+- Seek and eat food for energy
+- (Extensible for more actions)
 
+---
 
-# Other notes
-- internal neuron
-iN = tanh(sum(inputs))
-with will be a number between -1.0 and 1.0
+## How It Works
 
-- similarly, action neurons
-aN = tanh(sum(inputs)) between -1.0 and 1.0
+1. At startup, a grid world is created. Lifeforms are spawned at random unoccupied positions, each with a random genome.
+2. Lifeforms sense their environment, process neural network output, act, and consume energy each "year."
+3. Food is randomly generated and is required for lifeforms to replenish energy and survive.
+4. If energy reaches zero or max age is hit, the lifeform dies.
+5. When the "year" counter reaches a generation threshold, the simulation evaluates survivors. New genomes are created via mutation for the next generation.
+6. All key events, including every action and death/food event, are logged per-creature for inspection in the UI.
 
-definition of genes
-SENSOR INPUTS
-float (fp) between 0 and 1
-weights (w) -4.0 to 4.0
-sN = fp * w
+---
+
+## Controls and UI
+
+- Grid world is visualized with colored cells representing lifeforms, their positions and deaths.
+- A **Selected Lifeform** sidebar shows detailed genome, sensors/actions, and a real-time action log.
+- Adjustable simulation speed and world regeneration.
+- Easily track specific lifeforms' stories and actions.
+
+---
+
+## Running and Building
+
+- **Development server:**  
+  `npm start`  
+  Then open [http://localhost:3000](http://localhost:3000)
+- **Production build:**  
+  `npm run build` (output in `dist/`)
+
+---
+
+## Thanks & Inspiration
+
+- Thanks to [Dave Miller's biosim4](https://github.com/davidrmiller/biosim4) for inspiring many of the structures and ideas.
+- Heavily influenced by genetic algorithms, artificial life, and neural evolutions concepts.
+
+---
+
+## Project Goals
+
+- Explore emergent complexity and digital evolution using simple rules.
+- Learn JavaScript, neuroevolution/genetics, and visualization techniques.
+- Encourage tinkering, hacks, and new experimentations!
+
+---
+
+**Contributions, questions, bug reports, ideas, and forks most welcome!**

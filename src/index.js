@@ -81,13 +81,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tableBody = document.getElementById('lifeform-table-body');
   tableBody.addEventListener('click', (event) => {
     if (event.target.classList.contains('select-lifeform-btn')) {
-      const lifeformId = event.target.dataset.id;
-      console.log(lifeformId);
-      const lifeformCell = document.querySelector(`.world [data-id='${lifeformId}']`);
-      if (lifeformCell) {
-        getClicked(lifeformCell);
-        lifeformCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      GLOBAL.selectedLifeformId = parseInt(event.target.dataset.id, 10);
+      updateSelectedLifeformUI();
+      drawWorld();
     }
   });
 
@@ -147,6 +143,7 @@ export function updateSelectedLifeformUI() {
   }
 
   const lifeform = GLOBAL.lifeform[id];
+  console.log(lifeform);
   
   if (logDiv) {
     if (lifeform && lifeform.actionLog.length) {
@@ -220,63 +217,159 @@ async function setupWorld(x, y, startingLife, isNewGeneration = false) {
     logToPage(`An error occurred: ${error.message}`);
     console.error(error);
   }
-
-  const firstLifeformElement = document.querySelector('.world [data-id="0"]');
-  if (firstLifeformElement) {
-    getClicked(firstLifeformElement);
-    logToPage('Tracking Lifeform #0 by default.');
-  }
+  
+  GLOBAL.selectedLifeformId = 0;
+  updateSelectedLifeformUI();
+  drawWorld();
+  logToPage('Tracking Lifeform #0 by default.');
 
   return true;
 }
 
+let worldCanvas, worldCtx;
 function createWorld(x, y) {
+  const w = GLOBAL.w;
+  const h = GLOBAL.h;
   logToPage('Creating World...');
-  const world = document.querySelector('.world');
-  world.innerHTML = '';
-  for (let horizontal = 0; horizontal < x; horizontal += 1 ) {
-    for (let vertical = 0; vertical < y; vertical += 1 ) {
-      world.insertAdjacentHTML('beforeend', `<div data-xy="${vertical}-${horizontal}" class="cell"></div>`);
+  // set up the canvas once
+  worldCanvas = document.querySelector('.world');
+  worldCanvas.addEventListener('click', onWorldCanvasClick);
+  worldCtx = worldCanvas.getContext('2d');
+  worldCanvas.width = x * w;
+  worldCanvas.height = y * h;
+  
+  // Clear the canvas initially
+  worldCtx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
+  
+  // No inner HTML/divs created for the grid anymore!
+  return true;
+}
+
+function onWorldCanvasClick(e) {
+  const rect = worldCanvas.getBoundingClientRect();
+  const scaleX = worldCanvas.width / rect.width;
+  const scaleY = worldCanvas.height / rect.height;
+  const mouseX = (e.clientX - rect.left) * scaleX;
+  const mouseY = (e.clientY - rect.top) * scaleY;
+  
+  // Allow for hit area around center of cell
+  const tolerance = Math.max(GLOBAL.w, GLOBAL.h) * 1.2; // 1.2 "cell radii" or try 6-10px constant
+  
+  // Find nearest lifeform within tolerance, prefer alive, then dead
+  let minDist = Infinity, best = null;
+  for (const lf of GLOBAL.lifeform) {
+    const lfCenterX = lf.pos_x * GLOBAL.w + GLOBAL.w / 2;
+    const lfCenterY = lf.pos_y * GLOBAL.h + GLOBAL.h / 2;
+    const dx = mouseX - lfCenterX;
+    const dy = mouseY - lfCenterY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < tolerance && dist < minDist) {
+      minDist = dist;
+      best = lf;
     }
   }
+  
+  if (best) {
+    GLOBAL.selectedLifeformId = best.id;
+    updateSelectedLifeformUI();
+    drawWorld();
+  }
+}
 
-  return true;
+function drawWorld() {
+  if (!worldCtx) return;
+  const x = GLOBAL.x;
+  const y = GLOBAL.y;
+  const w = GLOBAL.w;
+  const h = GLOBAL.h;
+  worldCtx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
+  
+  // Draw food
+  for (const pos of GLOBAL.foodGrid) {
+    const [fy, fx] = pos.split('-').map(Number);
+    worldCtx.fillStyle = '#2ecc71';
+    worldCtx.beginPath();
+    worldCtx.arc(fx * w + 4, fy * h + 4, 2, 0, 2 * Math.PI);
+    worldCtx.fill();
+  }
+  
+  // Draw ALL lifeforms
+  for (const lifeform of GLOBAL.lifeform) {
+    if (lifeform.alive) {
+      worldCtx.fillStyle = `rgb(${lifeform.color[0]},${lifeform.color[1]},${lifeform.color[2]})`;
+      worldCtx.beginPath();
+      worldCtx.arc(
+        lifeform.pos_x * w + 4,
+        lifeform.pos_y * h + 4,
+        3, 0, 2 * Math.PI
+      );
+      worldCtx.fill();
+    } else {
+      // Draw dead as a red X or square
+      worldCtx.strokeStyle = "#c62828"; // red or gray e.g. "#888"
+      worldCtx.lineWidth = 1.5;
+      // Draw X at (pos_x, pos_y)
+      let px = lifeform.pos_x * w + 1;
+      let py = lifeform.pos_y * h + 1;
+      worldCtx.beginPath();
+      worldCtx.moveTo(px, py);
+      worldCtx.lineTo(px+w, py+h);
+      worldCtx.moveTo(px+w, py);
+      worldCtx.lineTo(px, py+h);
+      worldCtx.stroke();
+      
+      // Optionally, faded fill
+      worldCtx.fillStyle = "rgba(150,50,50,0.18)";
+      worldCtx.fillRect(lifeform.pos_x * w + 1, lifeform.pos_y * h + 1, w, h);
+    }
+  }
+  const selected = GLOBAL.lifeform[GLOBAL.selectedLifeformId];
+  if (selected) {
+    worldCtx.strokeStyle = "orange";
+    worldCtx.lineWidth = 2;
+    worldCtx.beginPath();
+    worldCtx.arc(selected.pos_x * GLOBAL.h + GLOBAL.h / 2, selected.pos_y * GLOBAL.w + GLOBAL.w / 2, 4, 0, 2 * Math.PI);
+    worldCtx.stroke();
+  }
 }
 
 function placeLifeformsOnGrid() {
-  // This function no longer creates lifeforms, it just places them.
+  // Step 1: Track occupied positions this generation
+  const occupied = new Set();
+  
   for (const lifeform of GLOBAL.lifeform) {
-    const cell = document.querySelector(`.world [data-xy='${lifeform.pos_x}-${lifeform.pos_y}']`);
-    if (cell) {
-      cell.classList.add('live-cell');
-      cell.dataset.id = lifeform.id;
-      cell.style.background = `rgb(${lifeform.color[0]}, ${lifeform.color[1]}, ${lifeform.color[2]})`;
+    const key = `${lifeform.pos_x}-${lifeform.pos_y}`;
+    let tries = 0;
+    // If this spawn location is already occupied, pick a new one
+    while (occupied.has(key) && tries < 500) {
+      // Find a new random legal position
+      lifeform.pos_x = randomInt(0, GLOBAL.x);
+      lifeform.pos_y = randomInt(0, GLOBAL.y);
+      lifeform.old_x = lifeform.pos_x;
+      lifeform.old_y = lifeform.pos_y;
+      tries++;
     }
+    occupied.add(`${lifeform.pos_x}-${lifeform.pos_y}`);
   }
-  // We can return true to keep the logic in setupWorld the same.
+  drawWorld();
   return true;
 }
 
 function spawnFood() {
-  // Clear existing food
-  document.querySelectorAll('.food-cell').forEach(el => el.classList.remove('food-cell'));
   GLOBAL.foodGrid = [];
-
-  for (let i = 0; i < GLOBAL.foodCount; i++) {
+  let foodCount = 0;
+  while (foodCount < GLOBAL.foodCount) {
     const x = randomInt(0, GLOBAL.x);
     const y = randomInt(0, GLOBAL.y);
     const pos = `${y}-${x}`;
     if (!GLOBAL.foodGrid.includes(pos)) {
       GLOBAL.foodGrid.push(pos);
-      const foodCell = document.querySelector(`.world [data-xy='${pos}']`);
-      if (foodCell) {
-        foodCell.classList.add('food-cell');
-      }
+      foodCount++;
     }
   }
+  drawWorld();
 }
 
-// In src/index.js
 export function updateLifeformTable() {
   const tableBody = document.getElementById('lifeform-table-body');
   if (!tableBody) return;
@@ -369,3 +462,5 @@ export async function createNewGeneration() {
   logToPage(`--- Beginning Generation ${GLOBAL.generation} ---`);
   startSimulation(GLOBAL.steps);
 }
+
+export { drawWorld };
