@@ -1,99 +1,112 @@
 <body>
 <header class="main-header">
-  <h1>Lifeform Simulator</h1>
+    <h1>Lifeform Simulator</h1>
 </header>
 
 <div class="universe">
-  <div class="left-panel">
-    <div class="world-container">
-      <canvas class="world"></canvas>
-    </div>
-    <div class="primary-controls">
-      <div class="stats-card">
-        <h3>Simulation Status</h3>
-        <div class="stat-item" id="generation-stat">
-          <strong>Generation:</strong> <span id="generation-value">0</span>
+    <div class="left-panel">
+        <div class="world-container">
+            <canvas class="world"></canvas>
         </div>
-        <div class="stat-item" id="year-stat">
-          <strong>Year:</strong> <span id="year-value">0</span>
+        <div class="primary-controls">
+            <div class="stats-card">
+                <h3>Simulation Status</h3>
+                <div class="stat-item" id="generation-stat">
+                    <strong>Generation:</strong> <span id="generation-value">0</span>
+                </div>
+                <div class="stat-item" id="year-stat">
+                    <strong>Year:</strong> <span id="year-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Population:</strong> <span id="population-value">-</span>
+                </div>
+            </div>
+            <div class="controls-card">
+                <div class="button-group">
+                    <button id="regenerateWorld">Restart</button>
+                    <button id="toggleSimulation">Pause</button>
+                    <button id="continueSimulation">Continue</button>
+                </div>
+                <div class="stat-item" style="margin-top: 15px;">
+                    <label for="speed-slider">Speed:</label>
+                    <input type="range" id="speed-slider" min="1" max="200" value="50">
+                </div>
+                <div class="stat-item">
+                    <input type="checkbox" id="toggle-food-energy" checked>
+                    <label for="toggle-food-energy" style="user-select:none;">Enable Food/Energy</label>
+                </div>
+            </div>
         </div>
-        <div class="stat-item">
-          <strong>Population:</strong> <span id="population-value">-</span>
-        </div>
-      </div>
-      <div class="controls-card">
-        <div class="button-group">
-          <button id="regenerateWorld">Restart</button>
-          <button id="toggleSimulation">Pause</button>
-          <button id="continueSimulation">Continue</button>
-        </div>
-        <div class="stat-item" style="margin-top: 15px;">
-          <label for="speed-slider">Speed:</label>
-          <input type="range" id="speed-slider" min="1" max="200" value="50">
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="right-panel">
-    <div class="tab-nav">
-      <button class="tab-link active" data-tab="tab-selection">Selected</button>
-      <button class="tab-link" data-tab="tab-population">Population</button>
-      <button class="tab-link" data-tab="tab-log">Log</button>
     </div>
 
-    <div id="tab-selection" class="tab-content active">
-      <div class="lifeform-card">
-        <h3>Selected Lifeform</h3>
-        <div id="cell-selected"><strong>ID:</strong> <span>-</span></div>
-        <div id="posx"><strong>Position X:</strong> <span>-</span></div>
-        <div id="posy"><strong>Position Y:</strong> <span>-</span></div>
-        <div id="energy"><strong>Energy:</strong> <span>-</span></div>
-        <hr>
-        <div id="genome-length"><strong>Genome Length:</strong> <span>-</span></div>
-        <div id="sensory-inputs"><strong>Sensory Inputs:</strong> <span>-</span></div>
-        <div id="inner-neurons"><strong>Inner Neurons:</strong> <span>-</span></div>
-        <div id="action-outputs"><strong>Action Outputs:</strong> <span>-</span></div>
-      </div>
-        <div class="life-action-log-card">
-            <h3>Lifeform Events</h3>
-            <div id="life-action-log"></div>
+    <div class="right-panel">
+        <div class="tab-nav">
+            <button class="tab-link active" data-tab="tab-selection">Selected</button>
+            <button class="tab-link" data-tab="tab-population">Population</button>
+            <button class="tab-link" data-tab="tab-log">Log</button>
         </div>
-      <div class="brain-card">
-        <h3>Brain (Genome)</h3>
-        <div id="genome-raw-output"></div>
-        <hr>
-        <div id="brain-output"></div>
-      </div>
-    </div>
 
-    <div id="tab-population" class="tab-content">
-      <div class="table-wrapper">
-        <table>
-          <thead>
-          <tr>
-            <th>ID</th>
-            <th>Gen</th>
-            <th>Status</th>
-            <th>Pos</th>
-            <th>Energy</th>
-            <th>Age</th>
-            <th>Dir</th>
-            <th>Action</th>
-            <th>Select</th>
-          </tr>
-          </thead>
-          <tbody id="lifeform-table-body"></tbody>
-        </table>
-      </div>
-    </div>
+        <div id="tab-selection" class="tab-content active">
+            <div class="lifeform-data">
+                <div class="lifeform-card">
+                    <h3>Selected Lifeform</h3>
+                    <div id="cell-selected"><strong>ID:</strong> <span>-</span></div>
+                    <div id="posx"><strong>Position X:</strong> <span>-</span></div>
+                    <div id="posy"><strong>Position Y:</strong> <span>-</span></div>
+                    <div id="energy"><strong>Energy:</strong> <span>-</span></div>
+                    <hr>
+                    <div id="genome-length"><strong>Genome Length:</strong> <span>-</span></div>
+                    <div id="sensory-inputs"><strong>Sensory Inputs:</strong> <span>-</span></div>
+                    <div id="inner-neurons"><strong>Inner Neurons:</strong> <span>-</span></div>
+                    <div id="action-outputs"><strong>Action Outputs:</strong> <span>-</span></div>
+                </div>
+                <div class="life-action-log-card">
+                    <h3>Lifeform Events</h3>
+                    <div id="life-action-log"></div>
+                </div>
+            </div>
+            <div class="brain-card">
+                <h3>Brain (Genome)</h3>
+                <div class="brain-details">
+                    <div class="brain-detail-item">
+                        <div id="genome-raw-output"></div>
+                        <hr>
+                        <div id="brain-output"></div>
+                        <div id="brain-debug-table"></div>
+                    </div>
+                    <canvas id="brain-canvas" width="600" height="500"
+                        style="background:#292d38;display:block;margin:10px auto 0 auto;border-radius:10px;"></canvas>
+                </div>
+            </div>
+        </div>
 
-    <div id="tab-log" class="tab-content">
-      <div class="log-card">
-        <h3>Log</h3>
-        <div id="log-output"></div>
-      </div>
+        <div id="tab-population" class="tab-content">
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Gen</th>
+                        <th>Status</th>
+                        <th>Pos</th>
+                        <th>Energy</th>
+                        <th>Age</th>
+                        <th>Dir</th>
+                        <th>Action</th>
+                        <th>Select</th>
+                    </tr>
+                    </thead>
+                    <tbody id="lifeform-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-log" class="tab-content">
+            <div class="log-card">
+                <h3>Log</h3>
+                <div id="log-output"></div>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 </body>

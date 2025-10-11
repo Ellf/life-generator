@@ -1,11 +1,10 @@
 import './style.css';
-import _ from 'lodash';
 import GLOBAL from './globals.js';
 import './simulator.js';
 import { startSimulation, stopSimulation } from './simulator.js';
 import SENS from './sensor.js';
 import ACTS from './action.js';
-import {logToPage, randomInt} from './utils.js';
+import {logToPage, randomInt, mutateGeneBit} from './utils.js';
 import Life, { createGenome, parseGene } from './life.js';
 
 // Create the grid
@@ -185,6 +184,168 @@ export function updateSelectedLifeformUI() {
     });
     brainOutput.innerHTML = brainHtml;
   }
+  
+  const debugTableDiv = document.getElementById('brain-debug-table');
+  debugTableDiv.innerHTML = ''; // clear previous
+  
+  if (lifeform._lastBrainStepDebug && lifeform._lastBrainStepDebug.length) {
+    // Table header
+    let html = `<table class="debug-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Input</th>
+          <th>Weight</th>
+          <th>Delta</th>
+          <th>Before</th>
+          <th>After</th>
+        </tr>
+      </thead>
+      <tbody>`;
+    
+    lifeform._lastBrainStepDebug.forEach(step => {
+      html += `
+        <tr>
+          <td>${step.geneIndex}</td>
+          <td>${step.from}</td>
+          <td>${step.to}</td>
+          <td>${step.sourceValue.toFixed(3)}</td>
+          <td>${step.weight.toFixed(3)}</td>
+          <td>${step.contribution.toFixed(3)}</td>
+          <td>${step.before.toFixed(3)}</td>
+          <td>${step.after.toFixed(3)}</td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    debugTableDiv.innerHTML = html;
+  } else {
+    debugTableDiv.innerHTML = '<em>No brain step data for this tick.</em>';
+  }
+  
+  drawBrainCanvas(lifeform);
+}
+
+// --- Draw neural network for selected lifeform ---
+function drawBrainCanvas(lifeform) {
+  const canvas = document.getElementById('brain-canvas');
+  if (!canvas || !lifeform || !lifeform.brain) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // 1. Find used sensors/neurons/actions from genes
+  const usedSensors = new Set();
+  const usedNeurons = new Set();
+  const usedActions = new Set();
+  
+  for (const gene of lifeform.brain) {
+    if (gene.sourceType === 0) usedSensors.add(gene.sourceId);
+    if (gene.sourceType === 1) usedNeurons.add(gene.sourceId);
+    if (gene.sinkType === 0) usedNeurons.add(gene.sinkId);
+    if (gene.sinkType === 1) usedActions.add(gene.sinkId);
+  }
+  // sorted for layout stability
+  const sensorsArr = Array.from(usedSensors).sort((a, b) => a - b);
+  const neuronsArr = Array.from(usedNeurons).sort((a, b) => a - b);
+  const actionsArr = Array.from(usedActions).sort((a, b) => a - b);
+  
+  // Limit how many are drawn for clarity (optional)
+  const MAX_SHOWN = 8;
+  const sensorsToDraw = sensorsArr.slice(0, MAX_SHOWN);
+  const neuronsToDraw = neuronsArr.slice(0, MAX_SHOWN);
+  const actionsToDraw = actionsArr.slice(0, MAX_SHOWN);
+  
+  // 2. Setup node positions per type
+  const nodeR = 15;
+  const nodeX = [200, 300, 400];
+  const nodeY = (len, idx) => canvas.height * (0.1 + 0.8 * (idx + 1) / (len + 1));
+  
+  // positional index mapping (id -> position in array)
+  const mapIdx = arr => {
+    const result = {};
+    arr.forEach((val, i) => result[val] = i);
+    return result;
+  };
+  const sensorMap = mapIdx(sensorsToDraw);
+  const neuronMap = mapIdx(neuronsToDraw);
+  const actionMap = mapIdx(actionsToDraw);
+  
+  // Draw connections first
+  ctx.globalAlpha = 0.8;
+  for (const gene of lifeform.brain) {
+    let from = null, to = null;
+    if (gene.sourceType === 0 && sensorMap.hasOwnProperty(gene.sourceId)) {
+      from = [nodeX[0], nodeY(sensorsToDraw.length, sensorMap[gene.sourceId])];
+    } else if (gene.sourceType === 1 && neuronMap.hasOwnProperty(gene.sourceId)) {
+      from = [nodeX[1], nodeY(neuronsToDraw.length, neuronMap[gene.sourceId])];
+    }
+    if (gene.sinkType === 0 && neuronMap.hasOwnProperty(gene.sinkId)) {
+      to = [nodeX[1], nodeY(neuronsToDraw.length, neuronMap[gene.sinkId])];
+    } else if (gene.sinkType === 1 && actionMap.hasOwnProperty(gene.sinkId)) {
+      to = [nodeX[2], nodeY(actionsToDraw.length, actionMap[gene.sinkId])];
+    }
+    if (!from || !to) continue;
+    ctx.strokeStyle = gene.weight >= 0 ? '#F9ED31' : '#F24367';
+    ctx.lineWidth = Math.max(1, Math.abs(gene.weight) * 2);
+    ctx.beginPath();
+    ctx.moveTo(from[0], from[1]);
+    ctx.lineTo(to[0], to[1]);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1.0;
+  
+  // Draw sensors (labels)
+  const sensorKeys = Object.keys(SENS.Sensor);
+  sensorsToDraw.forEach((id, i) => {
+    ctx.beginPath();
+    ctx.arc(nodeX[0], nodeY(sensorsToDraw.length, i), nodeR, 0, 2 * Math.PI);
+    ctx.fillStyle = '#24cb72';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = 'bold 11px Segoe UI,Arial';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = "right";
+    ctx.fillText(sensorKeys[id], nodeX[0] - nodeR - 8, nodeY(sensorsToDraw.length, i) + 4);
+  });
+  
+  // Draw neurons
+  neuronsToDraw.forEach((id, i) => {
+    let nv = (lifeform._lastNeuronValues && typeof lifeform._lastNeuronValues[id] === 'number')
+      ? lifeform._lastNeuronValues[id] : 0;
+    ctx.beginPath();
+    ctx.arc(nodeX[1], nodeY(neuronsToDraw.length, i), nodeR, 0, 2 * Math.PI);
+    ctx.fillStyle = `rgb(${nv > 0 ? 255 : 100}, ${nv > 0 ? 235 : 120}, ${nv > 0 ? 70 : 190})`;
+    ctx.globalAlpha = 0.95;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = 'bold 11px Segoe UI,Arial';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('N' + id, nodeX[1], nodeY(neuronsToDraw.length, i));
+  });
+  
+  // Draw actions
+  const actionKeys = Object.keys(ACTS.Action);
+  actionsToDraw.forEach((id, i) => {
+    ctx.beginPath();
+    ctx.arc(nodeX[2], nodeY(actionsToDraw.length, i), nodeR, 0, 2 * Math.PI);
+    ctx.fillStyle = '#299de0';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = 'bold 11px Segoe UI,Arial';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = "left";
+    ctx.fillText(actionKeys[id], nodeX[2] + nodeR + 8, nodeY(actionsToDraw.length, i) + 4);
+  });
 }
 
 async function setupWorld(x, y, startingLife, isNewGeneration = false) {
@@ -221,6 +382,7 @@ async function setupWorld(x, y, startingLife, isNewGeneration = false) {
   GLOBAL.selectedLifeformId = 0;
   updateSelectedLifeformUI();
   drawWorld();
+  drawBrainCanvas(GLOBAL.selectedLifeformId);
   logToPage('Tracking Lifeform #0 by default.');
 
   return true;
@@ -276,6 +438,16 @@ function onWorldCanvasClick(e) {
   }
 }
 
+const foodEnergyCheckbox = document.getElementById('toggle-food-energy');
+foodEnergyCheckbox.checked = GLOBAL.foodEnergyEnabled;
+foodEnergyCheckbox.addEventListener('change', async (event) => {
+  GLOBAL.foodEnergyEnabled = event.target.checked;
+  logToPage('Food/Energy ' + (GLOBAL.foodEnergyEnabled ? 'enabled' : 'disabled') + '. Restarting world...');
+  stopSimulation();
+  await setupWorld(GLOBAL.x, GLOBAL.y, GLOBAL.startingLife); // food spawning logic responds to the flag
+  startSimulation(GLOBAL.steps);
+});
+
 function drawWorld() {
   if (!worldCtx) return;
   const x = GLOBAL.x;
@@ -285,12 +457,14 @@ function drawWorld() {
   worldCtx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
   
   // Draw food
-  for (const pos of GLOBAL.foodGrid) {
-    const [fy, fx] = pos.split('-').map(Number);
-    worldCtx.fillStyle = '#2ecc71';
-    worldCtx.beginPath();
-    worldCtx.arc(fx * w + 4, fy * h + 4, 2, 0, 2 * Math.PI);
-    worldCtx.fill();
+  if (GLOBAL.foodEnergyEnabled) {
+    for (const pos of GLOBAL.foodGrid) {
+      const [fy, fx] = pos.split('-').map(Number);
+      worldCtx.fillStyle = '#2ecc71';
+      worldCtx.beginPath();
+      worldCtx.arc(fx * w + 4, fy * h + 4, 2, 0, 2 * Math.PI);
+      worldCtx.fill();
+    }
   }
   
   // Draw ALL lifeforms
@@ -357,6 +531,10 @@ function placeLifeformsOnGrid() {
 
 function spawnFood() {
   GLOBAL.foodGrid = [];
+  if (!GLOBAL.foodEnergyEnabled) {
+    drawWorld();
+    return;
+  }
   let foodCount = 0;
   while (foodCount < GLOBAL.foodCount) {
     const x = randomInt(0, GLOBAL.x);
@@ -444,7 +622,7 @@ export async function createNewGeneration() {
       // 3. MUTATION: Apply the mutation rate
       if (Math.random() < GLOBAL.mutation_rate) {
         // If mutation occurs, create one new random gene
-        return createGenome(1)[0];
+        return mutateGeneBit(gene);
       }
       // Otherwise, pass the parent's gene on unchanged
       return gene;
@@ -463,4 +641,4 @@ export async function createNewGeneration() {
   startSimulation(GLOBAL.steps);
 }
 
-export { drawWorld };
+export { drawWorld, drawBrainCanvas };

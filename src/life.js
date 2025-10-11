@@ -34,12 +34,50 @@ export default class Life {
     const sensorNames = Object.keys(SENS.Sensor);
     const sensorValues = new Array(sensorNames.length).fill(0);
 
-    // --- Example Implementations for a few sensors ---
-
     // LOC_X: East/West location, normalized between 0.0 and 1.0
     const locXIndex = sensorNames.indexOf('LOC_X');
     if (locXIndex !== -1) {
       sensorValues[locXIndex] = this.pos_x / GLOBAL.x;
+    }
+    
+    // LOC_Y: NORTH/SOUTH location, normalized between 0.0 and 1.0
+    const locYIndex = sensorNames.indexOf('LOC_Y');
+    if (locYIndex !== -1) {
+      sensorValues[locYIndex] = this.pos_y / GLOBAL.y;
+    }
+    
+    // GENETIC_SIM_FWD: The genetic similarity of creature in front
+    const geneticSimFwd = sensorNames.indexOf('GENETIC_SIM_FWD');
+    let geneticSim = 0;
+    
+    if (geneticSimFwd !== -1) {
+      let fwdX = this.pos_x, fwdY = this.pos_y;
+      if (this.direction === 0) fwdY--; // North
+      if (this.direction === 1) fwdX++; // East
+      if (this.direction === 2) fwdY++; // South
+      if (this.direction === 3) fwdX--; // West
+      
+      let forwardLifeform = null;
+      for (const lf of GLOBAL.lifeform) {
+        if (lf.alive && lf.pos_x === fwdX && lf.pos_y === fwdY) {
+          forwardLifeform = lf;
+          break;
+        }
+      }
+      
+      if (forwardLifeform) {
+        const genomeA = this.genome;
+        const genomeB = forwardLifeform.genome;
+        let matching = 0;
+        let compareLen = Math.min(genomeA.length, genomeB.length);
+        for (let i = 0; i < compareLen; i++) {
+          if (genomeA[i] === genomeB[i]) matching++;
+        }
+        geneticSim = matching / compareLen; // 1.0 = identical, 0 = nothing matches
+      }
+      
+      // return the value
+      sensorValues[geneticSimFwd] = geneticSim;
     }
 
     // AGE: Normalized age. Let's cap max age at 1000 for normalization.
@@ -102,71 +140,112 @@ export default class Life {
     // --- Add a Food Sensor ---
     const foodFwdIndex = sensorNames.indexOf('SIGNAL0_FOOD');
     if (foodFwdIndex !== -1) {
-      let closestFoodDist = Infinity;
-      let foodInSight = 0.0;
-
-      // Find the closest food source
-      for (const foodPos of GLOBAL.foodGrid) {
-        const [foodY, foodX] = foodPos.split('-').map(Number);
-        const distX = foodX - this.pos_x;
-        const distY = foodY - this.pos_y;
-        const distance = Math.sqrt(distX * distX + distY * distY);
-
-        if (distance < closestFoodDist) {
-          // Check if the closest food is in the direction we are facing
-          let inDirection = false;
-          if (this.direction === 0 && distY < 0 && Math.abs(distX) < Math.abs(distY)) inDirection = true; // North
-          if (this.direction === 1 && distX > 0 && Math.abs(distY) < Math.abs(distX)) inDirection = true; // East
-          if (this.direction === 2 && distY > 0 && Math.abs(distX) < Math.abs(distY)) inDirection = true; // South
-          if (this.direction === 3 && distX < 0 && Math.abs(distY) < Math.abs(distX)) inDirection = true; // West
-
-          if(inDirection) {
-            // The signal is stronger the closer the food is (1.0 = right next to us)
-            foodInSight = 1.0 - (distance / (GLOBAL.x)); // Normalize by world size
-            closestFoodDist = distance;
+      
+      if (!GLOBAL.foodEnergyEnabled) {
+        sensorValues[foodFwdIndex] = 0.0;
+      } else {
+        let closestFoodDist = Infinity;
+        let foodInSight = 0.0;
+        
+        // Find the closest food source
+        for (const foodPos of GLOBAL.foodGrid) {
+          const [foodY, foodX] = foodPos.split('-').map(Number);
+          const distX = foodX - this.pos_x;
+          const distY = foodY - this.pos_y;
+          const distance = Math.sqrt(distX * distX + distY * distY);
+          
+          if (distance < closestFoodDist) {
+            // Check if the closest food is in the direction we are facing
+            let inDirection = false;
+            if (this.direction === 0 && distY < 0 && Math.abs(distX) < Math.abs(distY)) inDirection = true; // North
+            if (this.direction === 1 && distX > 0 && Math.abs(distY) < Math.abs(distX)) inDirection = true; // East
+            if (this.direction === 2 && distY > 0 && Math.abs(distX) < Math.abs(distY)) inDirection = true; // South
+            if (this.direction === 3 && distX < 0 && Math.abs(distY) < Math.abs(distX)) inDirection = true; // West
+            
+            if (inDirection) {
+              // The signal is stronger the closer the food is (1.0 = right next to us)
+              foodInSight = 1.0 - (distance / (GLOBAL.x)); // Normalize by world size
+              closestFoodDist = distance;
+            }
           }
         }
+        sensorValues[foodFwdIndex] = foodInSight;
       }
-      sensorValues[foodFwdIndex] = foodInSight;
     }
 
     return sensorValues;
   }
-
+  
   processBrain(occupiedCells) {
     const sensorValues = this.getSensorValues(occupiedCells);
     const neuronValues = new Array(this.inner_neurons).fill(0);
     const actionValues = new Array(Object.keys(ACTS.Action).length).fill(0);
-
+    
+    // DEBUG log structure
+    const debugSteps = []; // <--- NEW (will populate per connection)
+    
     // 1. Process all connections in the brain
-    for (const gene of this.brain) {
+    for (let geneIndex = 0; geneIndex < this.brain.length; geneIndex++) {
+      const gene = this.brain[geneIndex];
+      
+      // Get value from source
       let sourceValue = 0;
-
-      if (gene.sourceType === 0) { // Source is a Sensor
+      let sourceLabel = '';
+      if (gene.sourceType === 0) { // Sensor
         sourceValue = sensorValues[gene.sourceId];
-      } else { // Source is an inner Neuron
+        sourceLabel = `Sensor[${Object.keys(SENS.Sensor)[gene.sourceId]}]`;
+      } else {
         sourceValue = neuronValues[gene.sourceId];
+        sourceLabel = `Neuron[${gene.sourceId}]`;
       }
-
-      // Calculate the weighted input
+      
+      // Store current value of destination before addition
+      let sinkLabel = '';
+      let destinationBefore = 0;
+      if (gene.sinkType === 0) { // neuron
+        destinationBefore = neuronValues[gene.sinkId];
+        sinkLabel = `Neuron[${gene.sinkId}]`;
+      } else { // action
+        destinationBefore = actionValues[gene.sinkId];
+        sinkLabel = `Action[${Object.keys(ACTS.Action)[gene.sinkId]}]`;
+      }
+      
+      // Compute delta
       const weightedValue = sourceValue * gene.weight;
-
-      if (gene.sinkType === 0) { // Sink is a Neuron
+      
+      // Actually apply delta
+      if (gene.sinkType === 0) {
         neuronValues[gene.sinkId] += weightedValue;
-      } else { // Sink is an Action
+      } else {
         actionValues[gene.sinkId] += weightedValue;
       }
+      
+      // Store destination after addition
+      const destinationAfter = (gene.sinkType === 0) ? neuronValues[gene.sinkId] : actionValues[gene.sinkId];
+      
+      // Add step to debug log
+      debugSteps.push({
+        geneIndex,
+        from: sourceLabel,
+        to: sinkLabel,
+        sourceValue,
+        weight: gene.weight,
+        contribution: weightedValue,
+        before: destinationBefore,
+        after: destinationAfter,
+      });
     }
-
+    
     // 2. Apply activation function (tanh) to all neurons and actions
-    // This squashes the values to be between -1.0 and 1.0
     for (let i = 0; i < neuronValues.length; i++) {
       neuronValues[i] = Math.tanh(neuronValues[i]);
     }
     for (let i = 0; i < actionValues.length; i++) {
       actionValues[i] = Math.tanh(actionValues[i]);
     }
-
+    
+    this._lastNeuronValues = neuronValues.slice(0, 4);
+    
     // 3. Find the action with the highest output value
     let maxOutput = -Infinity;
     let chosenActionId = -1;
@@ -177,8 +256,9 @@ export default class Life {
       }
     }
     
-    // Only return a valid action if it has a positive activation
-    // or at least exceeds a threshold
+    // --- NEW: Store this for inspection/debugging in UI or log ---
+    this._lastBrainStepDebug = debugSteps;
+    
     if (chosenActionId !== -1 && maxOutput > 0.0) {
       return chosenActionId;
     }
@@ -250,14 +330,34 @@ export default class Life {
       case 'MOVE_X': {
         const level = actionValues[actionNames.indexOf('MOVE_X')]; // tanh output [-1,1]
         const dx = Math.round(level); // +1, 0, -1
-        if (dx !== 0) this._move(dx, 0, this.direction, occupiedCells);
+        let moved = false;
+        if (dx !== 0) {
+          moved = this._move(dx, 0, this.direction, occupiedCells);
+          if (moved) {
+            this.lastAction = `MOVE_X to ${this.pos_x},${this.pos_y}`;
+            this.actionLog.push(`MOVE_X by ${dx} to (${this.pos_x},${this.pos_y})`);
+          }
+        } else {
+          this.lastAction = 'MOVE_X (no move)';
+          this.actionLog.push('MOVE_X neuron fired, but output ~0 (no move)');
+        }
         break;
       }
       
       case 'MOVE_Y': {
         const level = actionValues[actionNames.indexOf('MOVE_Y')]; // tanh output [-1,1]
         const dy = Math.round(level); // +1, 0, -1
-        if (dy !== 0) this._move(0, dy, this.direction, occupiedCells);
+        let moved = false;
+        if (dy !== 0) {
+          moved = this._move(0, dy, this.direction, occupiedCells);
+          if (moved) {
+            this.lastAction = `MOVE_Y to ${this.pos_y},${this.pos_y}`;
+            this.actionLog.push(`MOVE_Y to ${this.pos_y},${this.pos_y}`);
+          }
+        } else {
+          this.lastAction = 'MOVE_Y (no move)';
+          this.actionLog.push('MOVE_Y neuron fired, but output ~0 (no move)');
+        }
         break;
       }
         
@@ -308,9 +408,10 @@ export default class Life {
       if (this.actionLog.length > 100) this.actionLog.shift();
       return false;
     }
-
-    // 3. Pay the energy cost.
-    this.energy -= GLOBAL.moveCost;
+    
+    // 3. Pay the energy cost — only if enabled.
+    if (GLOBAL.foodEnergyEnabled)
+      this.energy -= GLOBAL.moveCost;
 
     // 4. Update the position in memory.
     this.direction = direction;
@@ -323,7 +424,7 @@ export default class Life {
     updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
 
     // 6. Check for death after the move.
-    if (this.energy <= 0) {
+    if (GLOBAL.foodEnergyEnabled && this.energy <= 0) {
       this.alive = false;
       this.actionLog.push("Died at (" + this.pos_x + "," + this.pos_y + ") [age=" + this.age + "]");
       if (this.actionLog.length > 100) this.actionLog.shift()
@@ -358,17 +459,18 @@ export default class Life {
   moveSouth(occupiedCells) {
     return this._move(0, 1, 2, occupiedCells); // dx=0, dy=1, direction=South(2)
   }
-
+  
   checkForFood() {
+    if (!GLOBAL.foodEnergyEnabled) return;
     const currentPos = `${this.pos_x}-${this.pos_y}`;
     const foodIndex = GLOBAL.foodGrid.indexOf(currentPos);
-
+    
     if (foodIndex > -1) {
       this.energy += GLOBAL.foodEnergy;
       this.actionLog.push("Ate food (+energy) @ (" + this.pos_x + "," + this.pos_y + ")");
       if (this.actionLog.length > 100) this.actionLog.shift()
       GLOBAL.foodGrid.splice(foodIndex, 1); // Remove food from the data array
-
+      
       // Remove the food visual from the grid
       const foodCell = document.querySelector(`.world [data-xy='${currentPos}']`);
       if (foodCell) {

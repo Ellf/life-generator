@@ -82,6 +82,28 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
+.lifeform-data {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+.gene-connection {
+    margin-bottom: 10px;
+}
+
+.lifeform-card { width: 200px;}
+
+.brain-details {
+    display:flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+.brain-detail-item {
+    width: 250px;
+}
+
 h3 {
   margin-top: 0;
   border-bottom: 1px solid var(--border-color);
@@ -218,12 +240,11 @@ button {
 }
 
 .life-action-log-card {
+    flex: 1;
     background-color: var(--panel-color);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 15px;
-    margin-top: 15px;
-    max-height: 180px;
     font-size: 0.95em;
     color: #c3e88d;
 }

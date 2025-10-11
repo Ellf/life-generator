@@ -6,7 +6,7 @@ let Sensor = createEnum([
     'LOC_Y',                    // Ly = north/south world location
     'BOUNDARY_DIST_X',          // BDx = east/west border distance
     'BOUNDARY_DIST',            // BD = nearest border distance
-    'BOUNDARY_DISY_Y',          // BDy = north/south border distance
+    'BOUNDARY_DIST_Y',          // BDy = north/south border distance
     'GENETIC_SIM_FWD',          // Gen = genetic similarity of fwd neighbour
     'LAST_MOVE_DIR_X',          // LMx = last movement X
     'LAST_MOVE_DIR_Y',          // LMy = last movement Y
@@ -20,9 +20,9 @@ let Sensor = createEnum([
     'BARRIER_FWD',              // Bfd = blockage forward
     'BARRIER_LR',               // Blr = blockage left-right
     'RANDOM',                   // Rnd = random input
-    'SIGNAL0',                  // Sfd = pheromone gradient forward
     'SIGNAL0_FOOD',             // Sg  = food forward
-    'SIGNAL0_LR',               // Slr = pheromone gradient left-right
+    'SIGNAL1',                  // Sfd = pheromone gradient forward
+    'SIGNAL1_LR',               // Slr = pheromone gradient left-right
 ]);
 
 export default {

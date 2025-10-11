@@ -1,7 +1,7 @@
 import GLOBAL from './globals.js';
 import {updateSelectedLifeformUI, createNewGeneration, updateLifeformTable} from './index.js';
 import {logToPage} from "./utils";
-import { drawWorld } from './index.js';
+import { drawWorld, drawBrainCanvas } from './index.js';
 
 let simulationTimeout = null;
 
@@ -26,8 +26,9 @@ function runStep() {
 
     // Apply cost of living and age up
     currentLifeform.age++;
-    currentLifeform.energy -= 1;
-    if (currentLifeform.energy <= 0) {
+    if (GLOBAL.foodEnergyEnabled) currentLifeform.energy -= 1;
+    // Only kill by energy if enabled
+    if (GLOBAL.foodEnergyEnabled && currentLifeform.energy <= 0) {
       currentLifeform.alive = false;
       currentLifeform.color = [200, 50, 50]; // Change color to a dim red
       const deadCell = document.querySelector(`.world [data-id='${currentLifeform.id}']`);
@@ -62,6 +63,7 @@ function runStep() {
 
   // 5. Schedule the NEXT step
   drawWorld();
+  drawBrainCanvas(GLOBAL.selectedLifeformId);
   simulationTimeout = setTimeout(runStep, GLOBAL.simulationSpeed);
 }
 
