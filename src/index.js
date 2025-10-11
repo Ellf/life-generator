@@ -126,7 +126,7 @@ export function updateSelectedLifeformUI() {
 
   // Clear brain display initially
   if (brainOutput) brainOutput.innerHTML = '';
-  if (genomeRawOutput) genomeRawOutput.innerHTML = '<strong>Raw Genome:</strong> <span>-</span>';
+  if (genomeRawOutput) genomeRawOutput.innerHTML = '-';
 
   if (id === null || !GLOBAL.lifeform[id]) {
     // Clear all fields if no lifeform is selected
@@ -142,7 +142,6 @@ export function updateSelectedLifeformUI() {
   }
 
   const lifeform = GLOBAL.lifeform[id];
-  console.log(lifeform);
   
   if (logDiv) {
     if (lifeform && lifeform.actionLog.length) {
@@ -165,7 +164,7 @@ export function updateSelectedLifeformUI() {
   if (genomeRawOutput && lifeform.genome) {
     // Join the array of hex strings with a space for readability
     const genomeString = lifeform.genome.join(' ');
-    genomeRawOutput.innerHTML = `<strong>Raw Genome:</strong> <span>${genomeString}</span>`;
+    genomeRawOutput.innerHTML = `${genomeString}`;
   }
 
   // Update the rest of the UI (like the brain display)

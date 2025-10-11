@@ -42,6 +42,9 @@
     <div class="right-panel">
         <div class="tab-nav">
             <button class="tab-link active" data-tab="tab-selection">Selected</button>
+            <button class="tab-link" data-tab="tab-events">
+                Events
+            </button>
             <button class="tab-link" data-tab="tab-population">Population</button>
             <button class="tab-link" data-tab="tab-log">Log</button>
         </div>
@@ -60,23 +63,21 @@
                     <div id="inner-neurons"><strong>Inner Neurons:</strong> <span>-</span></div>
                     <div id="action-outputs"><strong>Action Outputs:</strong> <span>-</span></div>
                 </div>
-                <div class="life-action-log-card">
-                    <h3>Lifeform Events</h3>
-                    <div id="life-action-log"></div>
-                </div>
+                <div id="brain-debug-table"></div>
             </div>
             <div class="brain-card">
-                <h3>Brain (Genome)</h3>
+                <h3>Brain (Genome) <span id="genome-raw-output"></span></h3>
                 <div class="brain-details">
-                    <div class="brain-detail-item">
-                        <div id="genome-raw-output"></div>
-                        <hr>
-                        <div id="brain-output"></div>
-                        <div id="brain-debug-table"></div>
-                    </div>
                     <canvas id="brain-canvas" width="600" height="500"
                         style="background:#292d38;display:block;margin:10px auto 0 auto;border-radius:10px;"></canvas>
                 </div>
+            </div>
+        </div>
+
+        <div id="tab-events" class="tab-content">
+            <div class="life-action-log-card">
+                <h3>Lifeform Events</h3>
+                <div id="life-action-log"></div>
             </div>
         </div>
 
