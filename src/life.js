@@ -30,6 +30,13 @@ export default class Life {
     this.color = genomeToColor(this.genome);
   }
 
+  _getPheromone(y, x) {
+    if (y < 0 || y >= GLOBAL.y || x < 0 || x >= GLOBAL.x) {
+      return 0; // Out of bounds is 0
+    }
+    return GLOBAL.pheromoneGrid[y][x];
+  }
+
   getSensorValues(occupiedCells) {
     const sensorNames = Object.keys(SENS.Sensor);
     const sensorValues = new Array(sensorNames.length).fill(0);
@@ -171,6 +178,48 @@ export default class Life {
         }
         sensorValues[foodFwdIndex] = foodInSight;
       }
+    }
+
+    // --- Add Pheromone Sensors ---
+    const norm = GLOBAL.pheromoneStrength; // For normalization
+
+    // SIGNAL1: Pheromone gradient forward (Value = Fwd - Current)
+    const signal1Index = sensorNames.indexOf('SIGNAL1');
+    if (signal1Index !== -1) {
+      let fwdX = this.pos_x, fwdY = this.pos_y;
+      if (this.direction === 0) fwdY--; // North
+      if (this.direction === 1) fwdX++; // East
+      if (this.direction === 2) fwdY++; // South
+      if (this.direction === 3) fwdX--; // West
+
+      const fwdStrength = this._getPheromone(fwdY, fwdX);
+      const currentStrength = this._getPheromone(this.pos_y, this.pos_x);
+
+      // Normalized difference: +1.0 = max scent fwd, -1.0 = max scent here
+      sensorValues[signal1Index] = (fwdStrength - currentStrength) / norm;
+    }
+
+    // SIGNAL1_LR: Pheromone gradient left/right (Value = Right - Left)
+    const signal1LRIndex = sensorNames.indexOf('SIGNAL1_LR');
+    if (signal1LRIndex !== -1) {
+      let leftX = this.pos_x, leftY = this.pos_y;
+      let rightX = this.pos_x, rightY = this.pos_y;
+
+      if (this.direction === 0) { // Facing North
+        leftX--; rightX++; // Left is West, Right is East
+      } else if (this.direction === 1) { // Facing East
+        leftY--; rightY++; // Left is North, Right is South
+      } else if (this.direction === 2) { // Facing South
+        leftX++; rightX--; // Left is East, Right is West
+      } else if (this.direction === 3) { // Facing West
+        leftY++; rightY--; // Left is South, Right is North
+      }
+
+      const leftStrength = this._getPheromone(leftY, leftX);
+      const rightStrength = this._getPheromone(rightY, rightX);
+
+      // Normalized difference: +1.0 = max scent right, -1.0 = max scent left
+      sensorValues[signal1LRIndex] = (rightStrength - leftStrength) / norm;
     }
 
     return sensorValues;
@@ -384,6 +433,13 @@ export default class Life {
         else if (randDir === 1) this.moveEast(occupiedCells);
         else if (randDir === 2) this.moveSouth(occupiedCells);
         else if (randDir === 3) this.moveWest(occupiedCells);
+        break;
+
+      case 'EMIT_SIGNAL1_PHER':
+        // Set the pheromone value at the current cell to max strength
+        if (this.pos_y >= 0 && this.pos_y < GLOBAL.y && this.pos_x >= 0 && this.pos_x < GLOBAL.x) {
+          GLOBAL.pheromoneGrid[this.pos_y][this.pos_x] = GLOBAL.pheromoneStrength;
+        }
         break;
 
       default:

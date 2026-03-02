@@ -48,4 +48,7 @@ export default {
   foodEnergy: 100,
   foodGrid: [],
   foodEnergyEnabled: true,
+  pheromoneGrid: [],
+  pheromoneStrength: 100,
+  pheromoneEvapRate: 1,
 }

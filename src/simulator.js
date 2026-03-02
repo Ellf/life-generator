@@ -5,11 +5,27 @@ import { drawWorld, drawBrainCanvas } from './index.js';
 
 let simulationTimeout = null;
 
+function updatePheromones() {
+  const grid = GLOBAL.pheromoneGrid;
+  const evapRate = GLOBAL.pheromoneEvapRate;
+
+  for (let y = 0; y < GLOBAL.y; y++) {
+    for (let x = 0; x < GLOBAL.x; x++) {
+      if (grid[y][x] > 0) {
+        grid[y][x] = Math.max(0, grid[y][x] - evapRate);
+      }
+    }
+  }
+}
+
 function runStep() {
   if (GLOBAL.yearCounter >= GLOBAL.targetYear || GLOBAL.isPaused) {
     stopSimulation();
     return;
   }
+
+  // Evaporate all pheromones before lifeforms act
+  updatePheromones();
 
   // 1. Create the "snapshot" of the world before anyone moves.
   const occupiedCells = new Map();

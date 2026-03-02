@@ -352,11 +352,35 @@ async function setupWorld(x, y, startingLife, isNewGeneration = false) {
     GLOBAL.generation = 0;
     GLOBAL.lifeform = []; // Clear the population
     document.getElementById('generation-value').textContent = GLOBAL.generation;
+
+    // Create the new random population directly in setupWorld
+    // for (let g = 0; g < startingLife; g++) {
+    //   GLOBAL.lifeform[g] = new Life(g, GLOBAL.generation);
+    // }
+
+    // This gene means: SENSOR[AGE] -> ACTION[EMIT_SIGNAL1_PHER]
+    // (The older it gets, the more it emits)
+    const pheromoneGene = '0E887FFF';
+
     // Create the new random population directly in setupWorld
     for (let g = 0; g < startingLife; g++) {
-      GLOBAL.lifeform[g] = new Life(g, GLOBAL.generation);
+      // Create a new lifeform with a random genome (default constructor)
+      let newLifeform = new Life(g, GLOBAL.generation);
+
+      // For the first 10 lifeforms, "seed" the pheromone gene
+      if (g < 10) {
+        newLifeform.genome[0] = pheromoneGene; // Overwrite the first gene
+        // Re-parse the brain to include the new gene
+        newLifeform.brain = newLifeform.genome.map(gene => parseGene(gene));
+      }
+
+      GLOBAL.lifeform[g] = newLifeform;
     }
+
   }
+
+  // Initialize/reset the pheromone grid to all zeros
+  GLOBAL.pheromoneGrid = new Array(GLOBAL.y).fill(0).map(() => new Array(GLOBAL.x).fill(0));
 
   GLOBAL.yearCounter = 0;
   GLOBAL.popCounter = 0;
@@ -454,7 +478,22 @@ function drawWorld() {
   const w = GLOBAL.w;
   const h = GLOBAL.h;
   worldCtx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
-  
+
+  const grid = GLOBAL.pheromoneGrid;
+  const norm = GLOBAL.pheromoneStrength;
+  if (grid.length) { // Only run if grid is initialized
+    for (let y = 0; y < GLOBAL.y; y++) {
+      for (let x = 0; x < GLOBAL.x; x++) {
+        if (grid[y][x] > 0) {
+          const alpha = (grid[y][x] / norm).toFixed(2); // 0.0 to 1.0
+          // Using a magenta color for pheromones
+          worldCtx.fillStyle = `rgba(255, 0, 255, ${alpha})`;
+          worldCtx.fillRect(x * w, y * h, w, h);
+        }
+      }
+    }
+  }
+
   // Draw food
   if (GLOBAL.foodEnergyEnabled) {
     for (const pos of GLOBAL.foodGrid) {
