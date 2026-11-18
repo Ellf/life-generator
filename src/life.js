@@ -344,11 +344,12 @@ export default class Life {
         break;
         
       case 'MOVE_RIGHT':
-        // if facing North, move east
+        // Directions are 0=North, 1=East, 2=South, 3=West.
+        // Facing North, right is East; East -> South; South -> West; West -> North.
         if (this.direction === 0) this.moveEast(occupiedCells);
         else if (this.direction === 1) this.moveSouth(occupiedCells);
-        else if (this.direction === 3) this.moveWest(occupiedCells);
-        else if (this.direction === 4) this.moveNorth(occupiedCells);
+        else if (this.direction === 2) this.moveWest(occupiedCells);
+        else if (this.direction === 3) this.moveNorth(occupiedCells);
         break;
       
       case 'MOVE_RL': {
@@ -411,11 +412,11 @@ export default class Life {
       }
         
       case 'MOVE_REVERSE':
-        // if facing north, move south
+        // Move the opposite way to the one we're facing (0=N, 1=E, 2=S, 3=W).
         if (this.direction === 0) this.moveSouth(occupiedCells);
         else if (this.direction === 1) this.moveWest(occupiedCells);
-        else if (this.direction === 3) this.moveNorth(occupiedCells);
-        else if (this.direction === 4) this.moveEast(occupiedCells);
+        else if (this.direction === 2) this.moveNorth(occupiedCells);
+        else if (this.direction === 3) this.moveEast(occupiedCells);
         break;
 
       case 'MOVE_FORWARD':
