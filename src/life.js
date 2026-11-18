@@ -524,20 +524,17 @@ export default class Life {
   
   checkForFood() {
     if (!GLOBAL.foodEnergyEnabled) return;
-    const currentPos = `${this.pos_x}-${this.pos_y}`;
+    // foodGrid stores positions as "y-x" (see spawnFood and drawWorld), so the
+    // lookup has to use the same order.
+    const currentPos = `${this.pos_y}-${this.pos_x}`;
     const foodIndex = GLOBAL.foodGrid.indexOf(currentPos);
-    
+
     if (foodIndex > -1) {
       this.energy += GLOBAL.foodEnergy;
       this.actionLog.push("Ate food (+energy) @ (" + this.pos_x + "," + this.pos_y + ")");
       if (this.actionLog.length > 100) this.actionLog.shift()
-      GLOBAL.foodGrid.splice(foodIndex, 1); // Remove food from the data array
-      
-      // Remove the food visual from the grid
-      const foodCell = document.querySelector(`.world [data-xy='${currentPos}']`);
-      if (foodCell) {
-        foodCell.classList.remove('food-cell');
-      }
+      // Removing it from foodGrid is enough: drawWorld redraws food from this array.
+      GLOBAL.foodGrid.splice(foodIndex, 1);
     }
   }
 
