@@ -571,7 +571,7 @@ export function createGenome(glength) {
       sourceType = 0;
     }
     // BIT 2-8
-    const sourceID = randomInt(0, 127);
+    const sourceID = randomInt(0, 128); // 0-127 (randomInt's max is exclusive)
     // BIT 1-8
     const sTandsID = sourceType | sourceID;
     const siT = randomInt(0, 2);
@@ -580,12 +580,17 @@ export function createGenome(glength) {
     } else {
       sinkType = 0;
     }
-    const sinkID = randomInt(0, 127);
+    const sinkID = randomInt(0, 128);
     const siTandsiID = sinkType | sinkID;
     
-    const weight = randomInt(0, 32767).toString(2); //16 bit
+    // The weight must be exactly 16 bits. Without padding, a small number like 5
+    // becomes '101' (3 bits), the whole gene comes out shorter than 32 bits, and
+    // parseGene reads the source/sink fields from the wrong positions.
+    // Using the full 0-65535 range also gives negative weights once parseGene
+    // treats it as a signed number.
+    const weight = randomInt(0, 65536).toString(2).padStart(16, '0');
     const gString = `${sTandsID.toString(2).padStart(8, '0')}${siTandsiID.toString(2).padStart(8, '0')}${weight}`;
-    const geneHex = parseInt(gString, 2).toString(16).toUpperCase();
+    const geneHex = parseInt(gString, 2).toString(16).padStart(8, '0').toUpperCase();
     gnome[g] = geneHex;
   }
   return gnome;
