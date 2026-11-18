@@ -294,7 +294,10 @@ export default class Life {
     }
     
     this._lastNeuronValues = neuronValues.slice(0, 4);
-    
+    // performAction needs the output strengths, not just which action won:
+    // MOVE_X, MOVE_Y and MOVE_RL use their level to decide how far to move.
+    this._lastActionValues = actionValues;
+
     // 3. Find the action with the highest output value
     let maxOutput = -Infinity;
     let chosenActionId = -1;
@@ -323,7 +326,9 @@ export default class Life {
     }
     const actionNames = Object.keys(ACTS.Action);
     const actionName = actionNames[actionId];
-    const actionValues = new Array(Object.keys(ACTS.Action).length).fill(0);
+    // The outputs processBrain just computed. (This used to be a fresh array of
+    // zeros, so the MOVE_X/MOVE_Y/MOVE_RL level was always 0 and they never moved.)
+    const actionValues = this._lastActionValues || [];
     this.lastAction = actionName;
     
     this.actionLog.push(`Action: ${actionName} @ (${this.pos_x},${this.pos_y}) [${this.energy}]`);
