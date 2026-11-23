@@ -14,6 +14,9 @@
   --mono: 'Courier New', Courier, monospace;
 }
 
+/* Elements with the hidden attribute stay hidden even if a class sets display. */
+[hidden] { display: none !important; }
+
 /* Tom's readability rule: no UI text below 16px. */
 html { font-size: 16px; }
 
@@ -89,7 +92,7 @@ body {
 }
 
 /* --- Card Styles --- */
-.stats-card, .controls-card, .lifeform-card, .log-card, .brain-card, .life-action-log-card {
+.stats-card, .controls-card, .lifeform-card, .log-card, .brain-card, .life-action-log-card, .progress-card {
   background-color: var(--panel-color);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -211,6 +214,34 @@ button.danger:hover { background-color: var(--danger-hover); }
 }
 
 .slider-row input { flex: 1; min-width: 0; }
+
+select {
+  width: 100%;
+  padding: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--text-color);
+  background: #1e1e1e;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+
+.label-note {
+  font-weight: normal;
+  color: var(--text-muted);
+}
+
+/* --- Progress chart --- */
+.progress-summary {
+  margin: 0 0 10px 0;
+}
+
+#history-chart {
+  display: block;
+  width: 100%;
+  background: #1e1e1e;
+  border-radius: 6px;
+}
 
 .checkbox-row {
   display: flex;

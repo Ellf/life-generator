@@ -3,6 +3,17 @@ import SENS from './sensor.js';
 import ACTS from './action.js';
 import { randomInt, setBit } from './utils.js';
 
+// Step offsets for each facing: 0 = North, 1 = East, 2 = South, 3 = West.
+const DIR_DX = [0, 1, 0, -1];
+const DIR_DY = [-1, 0, 1, 0];
+const LONG_PROBE_DIST = 16; // how far LONGPROBE_BAR_FWD looks ahead, in cells
+
+/** True if (x, y) is outside the world or a wall cell. */
+export function isBlocked(x, y) {
+  if (x < 0 || x >= GLOBAL.x || y < 0 || y >= GLOBAL.y) return true;
+  return GLOBAL.barrierGrid.length > 0 && GLOBAL.barrierGrid[y * GLOBAL.x + x] === 1;
+}
+
 export default class Life {
   constructor(id, generation = 0, genome = null) {
     this.alive = true;
@@ -121,15 +132,33 @@ export default class Life {
       sensorValues[boundaryDistIndex] = Math.min(sensorValues[boundaryXIndex], sensorValues[boundaryYIndex]);
     }
 
+    // BARRIER_FWD: 1.0 if the cell straight ahead is a wall or the world edge.
+    const dx = DIR_DX[this.direction], dy = DIR_DY[this.direction];
     const barrierFwdIndex = sensorNames.indexOf('BARRIER_FWD');
     if (barrierFwdIndex !== -1) {
-      let isBlocked = false;
-      if (this.direction === 0 && this.pos_y === 0) isBlocked = true; // Facing North at top edge
-      if (this.direction === 1 && this.pos_x === GLOBAL.x - 1) isBlocked = true; // Facing East at right edge
-      if (this.direction === 2 && this.pos_y === GLOBAL.y - 1) isBlocked = true; // Facing South at bottom edge
-      if (this.direction === 3 && this.pos_x === 0) isBlocked = true; // Facing West at left edge
+      sensorValues[barrierFwdIndex] = isBlocked(this.pos_x + dx, this.pos_y + dy) ? 1.0 : 0.0;
+    }
 
-      sensorValues[barrierFwdIndex] = isBlocked ? 1.0 : 0.0;
+    // BARRIER_LR: wall to the side (Value = Right - Left: +1 wall on the right, -1 on the left).
+    const barrierLRIndex = sensorNames.indexOf('BARRIER_LR');
+    if (barrierLRIndex !== -1) {
+      // Right of facing (dx, dy) is (-dy, dx); left is (dy, -dx).
+      const right = isBlocked(this.pos_x - dy, this.pos_y + dx) ? 1 : 0;
+      const left = isBlocked(this.pos_x + dy, this.pos_y - dx) ? 1 : 0;
+      sensorValues[barrierLRIndex] = right - left;
+    }
+
+    // LONGPROBE_BAR_FWD: how close the nearest wall ahead is (1.0 = adjacent, 0 = none in range).
+    const longProbeBarIndex = sensorNames.indexOf('LONGPROBE_BAR_FWD');
+    if (longProbeBarIndex !== -1) {
+      let value = 0;
+      for (let d = 1; d <= LONG_PROBE_DIST; d++) {
+        if (isBlocked(this.pos_x + dx * d, this.pos_y + dy * d)) {
+          value = 1 - (d - 1) / LONG_PROBE_DIST;
+          break;
+        }
+      }
+      sensorValues[longProbeBarIndex] = value;
     }
 
     // --- Add POPULATION_FWD Sensor ---
@@ -458,9 +487,9 @@ export default class Life {
     const newX = this.pos_x + dx;
     const newY = this.pos_y + dy;
 
-    // 1. Check if the move is within world boundaries.
-    if (newX < 0 || newX >= GLOBAL.x || newY < 0 || newY >= GLOBAL.y) {
-      return false; // Can't move, hit a wall.
+    // 1. Check the move stays inside the world and doesn't walk into a wall.
+    if (isBlocked(newX, newY)) {
+      return false;
     }
     
     // 2. Check for other lifeform
@@ -481,6 +510,12 @@ export default class Life {
     this.old_y = this.pos_y;
     this.pos_x = newX;
     this.pos_y = newY;
+
+    // 5. Keep this tick's occupancy map current, so two lifeforms can't step onto the same cell.
+    if (occupiedCells) {
+      occupiedCells.delete(`${this.old_y}-${this.old_x}`);
+      occupiedCells.set(`${newY}-${newX}`, true);
+    }
 
     // 6. Check for death after the move.
     if (GLOBAL.foodEnergyEnabled && this.energy <= 0) {

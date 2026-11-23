@@ -15,7 +15,7 @@
         <div class="world-container">
             <canvas class="world" title="Click a lifeform to inspect it"></canvas>
         </div>
-        <p class="hint">Click a lifeform to inspect it. Orange ring = selected, green = food, red ✕ = died.</p>
+        <p class="hint">Click a lifeform to inspect it. Grey = wall, blue area = goal, orange ring = selected, green dots = food, red ✕ = died.</p>
         <div class="primary-controls">
             <div class="stats-card">
                 <h3>Simulation</h3>
@@ -28,12 +28,19 @@
                 <div class="stat-item">
                     <strong>Alive</strong> <span id="population-value">-</span>
                 </div>
+                <div class="stat-item" id="goal-stat">
+                    <strong>In goal</strong> <span id="goal-value">-</span>
+                </div>
                 <div id="status-message" class="status-message" role="status" hidden></div>
             </div>
             <div class="controls-card">
                 <div class="button-group">
                     <button id="toggleSimulation" class="primary">Pause</button>
                     <button id="regenerateWorld" class="danger" title="Start again with a new random population">Restart</button>
+                </div>
+                <div class="control-row">
+                    <label for="challenge-select">Challenge <span class="label-note">(restarts)</span></label>
+                    <select id="challenge-select"></select>
                 </div>
                 <div class="control-row">
                     <label for="speed-slider">Speed</label>
@@ -44,10 +51,15 @@
                     </div>
                 </div>
                 <div class="control-row checkbox-row">
-                    <input type="checkbox" id="toggle-food-energy" checked>
+                    <input type="checkbox" id="toggle-food-energy">
                     <label for="toggle-food-energy">Food &amp; energy</label>
                 </div>
             </div>
+        </div>
+        <div class="progress-card">
+            <h3 id="progress-title">Progress</h3>
+            <p class="progress-summary" id="progress-summary">The chart fills in as each generation finishes.</p>
+            <canvas id="history-chart" height="240"></canvas>
         </div>
     </div>
 
