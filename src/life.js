@@ -87,14 +87,9 @@ export default class Life {
       if (this.direction === 2) fwdY++; // South
       if (this.direction === 3) fwdX--; // West
       
-      let forwardLifeform = null;
-      for (const lf of GLOBAL.lifeform) {
-        if (lf.alive && lf.pos_x === fwdX && lf.pos_y === fwdY) {
-          forwardLifeform = lf;
-          break;
-        }
-      }
-      
+      const ahead = occupiedCells && occupiedCells.get(`${fwdY}-${fwdX}`);
+      const forwardLifeform = ahead && ahead !== true && ahead.alive ? ahead : null;
+
       if (forwardLifeform) {
         const genomeA = this.genome;
         const genomeB = forwardLifeform.genome;
@@ -297,7 +292,8 @@ export default class Life {
     const actionNames = Object.keys(ACTS.Action);
     const accumulators = new Array(GLOBAL.inner_neurons).fill(0);
     const actionLevels = new Array(actionNames.length).fill(0);
-    const debugSteps = [];
+    // Only the selected lifeform's step-by-step detail is shown, so only record that one.
+    const debugSteps = this.id === GLOBAL.selectedLifeformId ? [] : null;
     let neuronsLatched = false;
 
     const latchNeurons = () => {
@@ -317,7 +313,7 @@ export default class Life {
       const before = target[gene.sinkId];
       target[gene.sinkId] += contribution;
 
-      debugSteps.push({
+      if (debugSteps) debugSteps.push({
         geneIndex: this.brain.indexOf(gene),
         from: gene.sourceType === 0 ? `Sensor[${sensorNames[gene.sourceId]}]` : `Neuron[${gene.sourceId}]`,
         to: gene.sinkType === 0 ? `Neuron[${gene.sinkId}]` : `Action[${actionNames[gene.sinkId]}]`,
@@ -333,7 +329,7 @@ export default class Life {
 
     this._lastNeuronValues = this.neurons.slice(0, 4);
     this._lastActionValues = actionLevels;
-    this._lastBrainStepDebug = debugSteps;
+    if (debugSteps) this._lastBrainStepDebug = debugSteps;
     return actionLevels;
   }
 
@@ -433,7 +429,7 @@ export default class Life {
     // 5. Keep this tick's occupancy map current, so two lifeforms can't step onto the same cell.
     if (occupiedCells) {
       occupiedCells.delete(`${this.old_y}-${this.old_x}`);
-      occupiedCells.set(`${newY}-${newX}`, true);
+      occupiedCells.set(`${newY}-${newX}`, this);
     }
 
     // 6. Check for death after the move.
