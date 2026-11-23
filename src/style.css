@@ -249,8 +249,12 @@ button.danger:hover { background-color: var(--danger-hover); }
   margin: 10px auto 0 auto;
   background: #292d38;
   border-radius: 10px;
-  max-width: 100%;
-  height: auto;
+}
+
+/* The brain canvas is never scaled (scaling would shrink its 16px labels);
+   on narrow screens it scrolls sideways inside its card instead. */
+.brain-scroll {
+  overflow-x: auto;
 }
 
 .legend {

@@ -36,8 +36,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   foodEnergyCheckbox.checked = GLOBAL.foodEnergyEnabled;
   foodEnergyCheckbox.addEventListener('change', (event) => {
     // Applied live, so the current run and its evolution carry on.
+    // Food already on the map is kept while disabled (drawing and sensors check the flag),
+    // so switching off and on again doesn't top it up.
     GLOBAL.foodEnergyEnabled = event.target.checked;
-    spawnFood();
+    if (GLOBAL.foodEnergyEnabled && GLOBAL.foodGrid.length === 0) spawnFood();
     logToPage(`Food/energy ${GLOBAL.foodEnergyEnabled ? 'enabled' : 'disabled'}.`);
     updateSelectedLifeformUI();
     updateLifeformTable();
@@ -535,4 +537,4 @@ export async function createNewGeneration() {
   startSimulation(GLOBAL.generationLength);
 }
 
-export { drawWorld, drawBrainCanvas };
+export { drawWorld };
