@@ -8,6 +8,18 @@ const DIR_DX = [0, 1, 0, -1];
 const DIR_DY = [-1, 0, 1, 0];
 const LONG_PROBE_DIST = 16; // how far LONGPROBE_BAR_FWD looks ahead, in cells
 
+// biosim4: neurons start (and, if undriven, stay) at 0.5, which gives brains a constant bias.
+const INITIAL_NEURON_OUTPUT = 0.5;
+const EMIT_THRESHOLD = 0.5;
+const RESPONSIVENESS_K = 2; // biosim4's responsivenessCurveKFactor
+const ACTION_INDEX = Object.fromEntries(Object.keys(ACTS.Action).map((name, i) => [name, i]));
+
+/** biosim4's responseCurve: maps responsiveness 0..1 to an activity factor 0..1. */
+function responseCurve(r) {
+  const k = RESPONSIVENESS_K;
+  return Math.pow(r - 2, -2 * k) - Math.pow(2, -2 * k) * (1 - r);
+}
+
 /** True if (x, y) is outside the world or a wall cell. */
 export function isBlocked(x, y) {
   if (x < 0 || x >= GLOBAL.x || y < 0 || y >= GLOBAL.y) return true;
@@ -254,233 +266,140 @@ export default class Life {
     return sensorValues;
   }
   
-  processBrain(occupiedCells) {
-    const sensorValues = this.getSensorValues(occupiedCells);
-    const neuronValues = new Array(this.inner_neurons).fill(0);
-    const actionValues = new Array(Object.keys(ACTS.Action).length).fill(0);
-    
-    // DEBUG log structure
-    const debugSteps = []; // <--- NEW (will populate per connection)
-    
-    // 1. Process all connections in the brain
-    for (let geneIndex = 0; geneIndex < this.brain.length; geneIndex++) {
-      const gene = this.brain[geneIndex];
-      
-      // Get value from source
-      let sourceValue = 0;
-      let sourceLabel = '';
-      if (gene.sourceType === 0) { // Sensor
-        sourceValue = sensorValues[gene.sourceId];
-        sourceLabel = `Sensor[${Object.keys(SENS.Sensor)[gene.sourceId]}]`;
-      } else {
-        sourceValue = neuronValues[gene.sourceId];
-        sourceLabel = `Neuron[${gene.sourceId}]`;
-      }
-      
-      // Store current value of destination before addition
-      let sinkLabel = '';
-      let destinationBefore = 0;
-      if (gene.sinkType === 0) { // neuron
-        destinationBefore = neuronValues[gene.sinkId];
-        sinkLabel = `Neuron[${gene.sinkId}]`;
-      } else { // action
-        destinationBefore = actionValues[gene.sinkId];
-        sinkLabel = `Action[${Object.keys(ACTS.Action)[gene.sinkId]}]`;
-      }
-      
-      // Compute delta
-      const weightedValue = sourceValue * gene.weight;
-      
-      // Actually apply delta
-      if (gene.sinkType === 0) {
-        neuronValues[gene.sinkId] += weightedValue;
-      } else {
-        actionValues[gene.sinkId] += weightedValue;
-      }
-      
-      // Store destination after addition
-      const destinationAfter = (gene.sinkType === 0) ? neuronValues[gene.sinkId] : actionValues[gene.sinkId];
-      
-      // Add step to debug log
-      debugSteps.push({
-        geneIndex,
-        from: sourceLabel,
-        to: sinkLabel,
-        sourceValue,
-        weight: gene.weight,
-        contribution: weightedValue,
-        before: destinationBefore,
-        after: destinationAfter,
-      });
-    }
-    
-    // 2. Apply activation function (tanh) to all neurons and actions
-    for (let i = 0; i < neuronValues.length; i++) {
-      neuronValues[i] = Math.tanh(neuronValues[i]);
-    }
-    for (let i = 0; i < actionValues.length; i++) {
-      actionValues[i] = Math.tanh(actionValues[i]);
-    }
-    
-    this._lastNeuronValues = neuronValues.slice(0, 4);
-    // performAction needs the output strengths, not just which action won:
-    // MOVE_X, MOVE_Y and MOVE_RL use their level to decide how far to move.
-    this._lastActionValues = actionValues;
-
-    // 3. Find the action with the highest output value
-    let maxOutput = -Infinity;
-    let chosenActionId = -1;
-    for (let i = 0; i < actionValues.length; i++) {
-      if (actionValues[i] > maxOutput) {
-        maxOutput = actionValues[i];
-        chosenActionId = i;
-      }
-    }
-    
-    // --- NEW: Store this for inspection/debugging in UI or log ---
-    this._lastBrainStepDebug = debugSteps;
-    
-    if (chosenActionId !== -1 && maxOutput > 0.0) {
-      return chosenActionId;
-    }
-    
-    return -1; // No action chosen
+  /**
+   * Order this brain's connections the way biosim4 does: everything feeding a neuron
+   * first, then everything feeding an action, so neurons are fully computed before
+   * any action reads them. Also note which neurons have inputs ("driven"); undriven
+   * neurons keep their starting output of 0.5 and act as a constant bias.
+   */
+  _wire() {
+    this._wiredBrain = this.brain;
+    this._wiring = [
+      ...this.brain.filter(g => g.sinkType === 0),
+      ...this.brain.filter(g => g.sinkType === 1),
+    ];
+    this._driven = new Array(GLOBAL.inner_neurons).fill(false);
+    for (const g of this.brain) if (g.sinkType === 0) this._driven[g.sinkId] = true;
+    this.neurons = new Array(GLOBAL.inner_neurons).fill(INITIAL_NEURON_OUTPUT);
   }
 
-  performAction(actionId, occupiedCells) {
-    // Check if no action was chosen
-    if (actionId === -1) {
-      this.lastAction = 'None';
+  /**
+   * One feed-forward pass (biosim4's feedForward). Returns the raw action levels:
+   * the weighted sums into each action, of arbitrary range.
+   * Neuron outputs are latched in this.neurons and carry over to the next step,
+   * so a neuron that feeds itself or another neuron sees last step's value.
+   */
+  processBrain(occupiedCells) {
+    if (this._wiredBrain !== this.brain) this._wire(); // brain was (re)built since last wiring
+
+    const sensorValues = this.getSensorValues(occupiedCells);
+    const sensorNames = Object.keys(SENS.Sensor);
+    const actionNames = Object.keys(ACTS.Action);
+    const accumulators = new Array(GLOBAL.inner_neurons).fill(0);
+    const actionLevels = new Array(actionNames.length).fill(0);
+    const debugSteps = [];
+    let neuronsLatched = false;
+
+    const latchNeurons = () => {
+      for (let i = 0; i < accumulators.length; i++) {
+        if (this._driven[i]) this.neurons[i] = Math.tanh(accumulators[i]);
+      }
+      neuronsLatched = true;
+    };
+
+    for (const gene of this._wiring) {
+      // Before the first connection into an action, squash and latch the neuron outputs.
+      if (gene.sinkType === 1 && !neuronsLatched) latchNeurons();
+
+      const sourceValue = gene.sourceType === 0 ? sensorValues[gene.sourceId] : this.neurons[gene.sourceId];
+      const contribution = sourceValue * gene.weight;
+      const target = gene.sinkType === 0 ? accumulators : actionLevels;
+      const before = target[gene.sinkId];
+      target[gene.sinkId] += contribution;
+
+      debugSteps.push({
+        geneIndex: this.brain.indexOf(gene),
+        from: gene.sourceType === 0 ? `Sensor[${sensorNames[gene.sourceId]}]` : `Neuron[${gene.sourceId}]`,
+        to: gene.sinkType === 0 ? `Neuron[${gene.sinkId}]` : `Action[${actionNames[gene.sinkId]}]`,
+        sourceValue,
+        weight: gene.weight,
+        contribution,
+        before,
+        after: target[gene.sinkId],
+      });
+    }
+    // A brain with no action connections still updates its neurons.
+    if (!neuronsLatched) latchNeurons();
+
+    this._lastNeuronValues = this.neurons.slice(0, 4);
+    this._lastActionValues = actionLevels;
+    this._lastBrainStepDebug = debugSteps;
+    return actionLevels;
+  }
+
+  /**
+   * Act on every action level at once (biosim4's executeActions). Movement outputs
+   * are summed into one X/Y urge; the chance of moving along each axis is the strength
+   * of that urge, so several outputs can blend (e.g. mostly east, a little north).
+   */
+  executeActions(levels, occupiedCells) {
+    const A = ACTION_INDEX;
+    const squash01 = v => (Math.tanh(v) + 1) / 2; // arbitrary level -> 0..1
+
+    // SET_RESPONSIVENESS: how readily this lifeform acts at all. Undriven, it sits at 0.5.
+    this.responsiveness = squash01(levels[A.SET_RESPONSIVENESS] || 0);
+    const responsiveness = responseCurve(this.responsiveness);
+
+    // EMIT_SIGNAL1_PHER: above the threshold, emit with probability equal to the level.
+    const emitLevel = squash01(levels[A.EMIT_SIGNAL1_PHER] || 0) * responsiveness;
+    if (emitLevel > EMIT_THRESHOLD && Math.random() < emitLevel) {
+      GLOBAL.pheromoneGrid[this.pos_y][this.pos_x] = GLOBAL.pheromoneStrength;
+    }
+
+    // --- Movement: sum every urge into X (east +) and Y (north +), as biosim4 does ---
+    const fwdX = DIR_DX[this.direction], fwdNorth = -DIR_DY[this.direction];
+    // Right of facing (east, north) is (north, -east); left is the opposite.
+    const rightX = fwdNorth, rightNorth = -fwdX;
+
+    let moveX = (levels[A.MOVE_X] || 0) + (levels[A.MOVE_EAST] || 0) - (levels[A.MOVE_WEST] || 0);
+    let moveY = (levels[A.MOVE_Y] || 0) + (levels[A.MOVE_NORTH] || 0) - (levels[A.MOVE_SOUTH] || 0);
+    const forward = (levels[A.MOVE_FORWARD] || 0) - (levels[A.MOVE_REVERSE] || 0);
+    moveX += fwdX * forward;
+    moveY += fwdNorth * forward;
+    const right = (levels[A.MOVE_RIGHT] || 0) - (levels[A.MOVE_LEFT] || 0) + (levels[A.MOVE_RL] || 0);
+    moveX += rightX * right;
+    moveY += rightNorth * right;
+    const randomLevel = levels[A.MOVE_RANDOM] || 0;
+    if (randomLevel) {
+      moveX += randomInt(-1, 2) * randomLevel;
+      moveY += randomInt(-1, 2) * randomLevel;
+    }
+
+    moveX = Math.tanh(moveX) * responsiveness;
+    moveY = Math.tanh(moveY) * responsiveness;
+    const stepX = Math.random() < Math.abs(moveX) ? Math.sign(moveX) : 0;
+    const stepNorth = Math.random() < Math.abs(moveY) ? Math.sign(moveY) : 0;
+
+    if (stepX === 0 && stepNorth === 0) {
+      this.lastAction = 'Idle';
       return;
     }
-    const actionNames = Object.keys(ACTS.Action);
-    const actionName = actionNames[actionId];
-    // The outputs processBrain just computed. (This used to be a fresh array of
-    // zeros, so the MOVE_X/MOVE_Y/MOVE_RL level was always 0 and they never moved.)
-    const actionValues = this._lastActionValues || [];
-    this.lastAction = actionName;
-    
-    this.actionLog.push(`Action: ${actionName} @ (${this.pos_x},${this.pos_y}) [${this.energy}]`);
-    if (this.actionLog.length > 100) this.actionLog.shift();
 
-    switch (actionName) {
-      case 'MOVE_EAST': this.moveEast(occupiedCells); break;
-      case 'MOVE_WEST': this.moveWest(occupiedCells); break;
-      case 'MOVE_NORTH': this.moveNorth(occupiedCells); break;
-      case 'MOVE_SOUTH': this.moveSouth(occupiedCells); break;
-      
-      case 'MOVE_LEFT':
-        // if facing North, move west
-        if (this.direction === 0) this.moveWest(occupiedCells);
-        else if (this.direction === 1) this.moveNorth(occupiedCells);
-        else if (this.direction === 2) this.moveEast(occupiedCells);
-        else if (this.direction === 3) this.moveSouth(occupiedCells);
-        break;
-        
-      case 'MOVE_RIGHT':
-        // Directions are 0=North, 1=East, 2=South, 3=West.
-        // Facing North, right is East; East -> South; South -> West; West -> North.
-        if (this.direction === 0) this.moveEast(occupiedCells);
-        else if (this.direction === 1) this.moveSouth(occupiedCells);
-        else if (this.direction === 2) this.moveWest(occupiedCells);
-        else if (this.direction === 3) this.moveNorth(occupiedCells);
-        break;
-      
-      case 'MOVE_RL': {
-        // direction: 0=North, 1=East, 2=South, 3=West
-        // Perpendicular to current direction, right = +1.0, left = -1.0
-        // Assume actionValues is in scope
-        const level = actionValues[actionNames.indexOf('MOVE_RL')]; // tanh output [-1,1]
-        let dx = 0, dy = 0;
-        switch (this.direction) {
-          case 0:  // North, right is East
-            dx = Math.round(level);
-            break;
-          case 1:  // East, right is South
-            dy = Math.round(level);
-            break;
-          case 2:  // South, right is West
-            dx = -Math.round(level);
-            break;
-          case 3:  // West, right is North
-            dy = -Math.round(level);
-            break;
-        }
-        // Only move if not zero (could include magnitude if desired)
-        if (dx !== 0 || dy !== 0) this._move(dx, dy, this.direction, occupiedCells);
-        break;
-      }
-      
-      case 'MOVE_X': {
-        const level = actionValues[actionNames.indexOf('MOVE_X')]; // tanh output [-1,1]
-        const dx = Math.round(level); // +1, 0, -1
-        let moved = false;
-        if (dx !== 0) {
-          moved = this._move(dx, 0, this.direction, occupiedCells);
-          if (moved) {
-            this.lastAction = `MOVE_X to ${this.pos_x},${this.pos_y}`;
-            this.actionLog.push(`MOVE_X by ${dx} to (${this.pos_x},${this.pos_y})`);
-          }
-        } else {
-          this.lastAction = 'MOVE_X (no move)';
-          this.actionLog.push('MOVE_X neuron fired, but output ~0 (no move)');
-        }
-        break;
-      }
-      
-      case 'MOVE_Y': {
-        const level = actionValues[actionNames.indexOf('MOVE_Y')]; // tanh output [-1,1]
-        const dy = Math.round(level); // +1, 0, -1
-        let moved = false;
-        if (dy !== 0) {
-          moved = this._move(0, dy, this.direction, occupiedCells);
-          if (moved) {
-            this.lastAction = `MOVE_Y to (${this.pos_x},${this.pos_y})`;
-            this.actionLog.push(`MOVE_Y to (${this.pos_x},${this.pos_y})`);
-          }
-        } else {
-          this.lastAction = 'MOVE_Y (no move)';
-          this.actionLog.push('MOVE_Y neuron fired, but output ~0 (no move)');
-        }
-        break;
-      }
-        
-      case 'MOVE_REVERSE':
-        // Move the opposite way to the one we're facing (0=N, 1=E, 2=S, 3=W).
-        if (this.direction === 0) this.moveSouth(occupiedCells);
-        else if (this.direction === 1) this.moveWest(occupiedCells);
-        else if (this.direction === 2) this.moveNorth(occupiedCells);
-        else if (this.direction === 3) this.moveEast(occupiedCells);
-        break;
+    // Face along the stronger urge (our facing is 4-way; biosim4's is 8-way).
+    const facing = Math.abs(moveX) >= Math.abs(moveY)
+      ? (stepX > 0 ? 1 : stepX < 0 ? 3 : (stepNorth > 0 ? 0 : 2))
+      : (stepNorth > 0 ? 0 : stepNorth < 0 ? 2 : (stepX > 0 ? 1 : 3));
+    const dy = -stepNorth; // our y grows southwards
+    const label = `${stepNorth > 0 ? 'N' : stepNorth < 0 ? 'S' : ''}${stepX > 0 ? 'E' : stepX < 0 ? 'W' : ''}`;
 
-      case 'MOVE_FORWARD':
-        // Move in the direction the lifeform is currently facing
-        if (this.direction === 0) this.moveNorth(occupiedCells);
-        else if (this.direction === 1) this.moveEast(occupiedCells);
-        else if (this.direction === 2) this.moveSouth(occupiedCells);
-        else if (this.direction === 3) this.moveWest(occupiedCells);
-        break;
-
-      case 'MOVE_RANDOM':
-        // Pick a random direction to move
-        const randDir = randomInt(0, 4);
-        if (randDir === 0) this.moveNorth(occupiedCells);
-        else if (randDir === 1) this.moveEast(occupiedCells);
-        else if (randDir === 2) this.moveSouth(occupiedCells);
-        else if (randDir === 3) this.moveWest(occupiedCells);
-        break;
-
-      case 'EMIT_SIGNAL1_PHER':
-        // Set the pheromone value at the current cell to max strength
-        if (this.pos_y >= 0 && this.pos_y < GLOBAL.y && this.pos_x >= 0 && this.pos_x < GLOBAL.x) {
-          GLOBAL.pheromoneGrid[this.pos_y][this.pos_x] = GLOBAL.pheromoneStrength;
-        }
-        break;
-
-      default:
-        // Do nothing if the action is not recognized
-        break;
+    if (this._move(stepX, dy, facing, occupiedCells)) {
+      this.lastAction = `Move ${label}`;
+      this.actionLog.push(`Move ${label} to (${this.pos_x},${this.pos_y})`);
+    } else {
+      this.lastAction = `Blocked ${label}`;
+      this.actionLog.push(`Blocked moving ${label} at (${this.pos_x},${this.pos_y})`);
     }
+    if (this.actionLog.length > 100) this.actionLog.shift();
   }
 
   _move(dx, dy, direction, occupiedCells) {
@@ -531,22 +450,6 @@ export default class Life {
     return true; // The move was successful.
   }
 
-  moveEast(occupiedCells) {
-    return this._move(1, 0, 1, occupiedCells); // dx=1, dy=0, direction=East(1)
-  }
-
-  moveWest(occupiedCells) {
-    return this._move(-1, 0, 3, occupiedCells); // dx=-1, dy=0, direction=West(3)
-  }
-
-  moveNorth(occupiedCells) {
-    return this._move(0, -1, 0, occupiedCells); // dx=0, dy=-1, direction=North(0)
-  }
-
-  moveSouth(occupiedCells) {
-    return this._move(0, 1, 2, occupiedCells); // dx=0, dy=1, direction=South(2)
-  }
-  
   checkForFood() {
     if (!GLOBAL.foodEnergyEnabled) return;
     // foodGrid stores positions as "y-x" (see spawnFood and drawWorld), so the

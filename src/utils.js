@@ -39,7 +39,7 @@ function mutateGeneBit(geneHex) {
   let geneInt = parseInt(geneHex, 16);
   const bitToFlip = Math.floor(Math.random() * 32); // Genes are 32 bits
   const mask = 1 << bitToFlip;
-  geneInt ^= mask; // XOR to flip the bit
+  geneInt = (geneInt ^ mask) >>> 0; // XOR to flip the bit; >>> 0 keeps it unsigned, so it never prints as '-3CD3...'
   // Return as hex string, ensuring 8 characters
   return geneInt.toString(16).padStart(8, '0').toUpperCase();
 }
