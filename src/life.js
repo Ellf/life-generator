@@ -294,7 +294,10 @@ export default class Life {
     }
     
     this._lastNeuronValues = neuronValues.slice(0, 4);
-    
+    // performAction needs the output strengths, not just which action won:
+    // MOVE_X, MOVE_Y and MOVE_RL use their level to decide how far to move.
+    this._lastActionValues = actionValues;
+
     // 3. Find the action with the highest output value
     let maxOutput = -Infinity;
     let chosenActionId = -1;
@@ -323,7 +326,9 @@ export default class Life {
     }
     const actionNames = Object.keys(ACTS.Action);
     const actionName = actionNames[actionId];
-    const actionValues = new Array(Object.keys(ACTS.Action).length).fill(0);
+    // The outputs processBrain just computed. (This used to be a fresh array of
+    // zeros, so the MOVE_X/MOVE_Y/MOVE_RL level was always 0 and they never moved.)
+    const actionValues = this._lastActionValues || [];
     this.lastAction = actionName;
     
     this.actionLog.push(`Action: ${actionName} @ (${this.pos_x},${this.pos_y}) [${this.energy}]`);
@@ -344,11 +349,12 @@ export default class Life {
         break;
         
       case 'MOVE_RIGHT':
-        // if facing North, move east
+        // Directions are 0=North, 1=East, 2=South, 3=West.
+        // Facing North, right is East; East -> South; South -> West; West -> North.
         if (this.direction === 0) this.moveEast(occupiedCells);
         else if (this.direction === 1) this.moveSouth(occupiedCells);
-        else if (this.direction === 3) this.moveWest(occupiedCells);
-        else if (this.direction === 4) this.moveNorth(occupiedCells);
+        else if (this.direction === 2) this.moveWest(occupiedCells);
+        else if (this.direction === 3) this.moveNorth(occupiedCells);
         break;
       
       case 'MOVE_RL': {
@@ -411,11 +417,11 @@ export default class Life {
       }
         
       case 'MOVE_REVERSE':
-        // if facing north, move south
+        // Move the opposite way to the one we're facing (0=N, 1=E, 2=S, 3=W).
         if (this.direction === 0) this.moveSouth(occupiedCells);
         else if (this.direction === 1) this.moveWest(occupiedCells);
-        else if (this.direction === 3) this.moveNorth(occupiedCells);
-        else if (this.direction === 4) this.moveEast(occupiedCells);
+        else if (this.direction === 2) this.moveNorth(occupiedCells);
+        else if (this.direction === 3) this.moveEast(occupiedCells);
         break;
 
       case 'MOVE_FORWARD':
@@ -508,14 +514,17 @@ export default class Life {
   
   checkForFood() {
     if (!GLOBAL.foodEnergyEnabled) return;
-    const currentPos = `${this.pos_y}-${this.pos_x}`; // foodGrid keys are 'y-x'
+    // foodGrid stores positions as "y-x" (see spawnFood and drawWorld), so the
+    // lookup has to use the same order.
+    const currentPos = `${this.pos_y}-${this.pos_x}`;
     const foodIndex = GLOBAL.foodGrid.indexOf(currentPos);
-    
+
     if (foodIndex > -1) {
       this.energy += GLOBAL.foodEnergy;
       this.actionLog.push("Ate food (+energy) @ (" + this.pos_x + "," + this.pos_y + ")");
       if (this.actionLog.length > 100) this.actionLog.shift()
-      GLOBAL.foodGrid.splice(foodIndex, 1); // Remove food from the data array
+      // Removing it from foodGrid is enough: drawWorld redraws food from this array.
+      GLOBAL.foodGrid.splice(foodIndex, 1);
     }
   }
 
@@ -555,7 +564,7 @@ export function createGenome(glength) {
       sourceType = 0;
     }
     // BIT 2-8
-    const sourceID = randomInt(0, 127);
+    const sourceID = randomInt(0, 128); // 0-127 (randomInt's max is exclusive)
     // BIT 1-8
     const sTandsID = sourceType | sourceID;
     const siT = randomInt(0, 2);
@@ -564,12 +573,17 @@ export function createGenome(glength) {
     } else {
       sinkType = 0;
     }
-    const sinkID = randomInt(0, 127);
+    const sinkID = randomInt(0, 128);
     const siTandsiID = sinkType | sinkID;
     
-    const weight = randomInt(0, 32767).toString(2); //16 bit
+    // The weight must be exactly 16 bits. Without padding, a small number like 5
+    // becomes '101' (3 bits), the whole gene comes out shorter than 32 bits, and
+    // parseGene reads the source/sink fields from the wrong positions.
+    // Using the full 0-65535 range also gives negative weights once parseGene
+    // treats it as a signed number.
+    const weight = randomInt(0, 65536).toString(2).padStart(16, '0');
     const gString = `${sTandsID.toString(2).padStart(8, '0')}${siTandsiID.toString(2).padStart(8, '0')}${weight}`;
-    const geneHex = parseInt(gString, 2).toString(16).toUpperCase();
+    const geneHex = parseInt(gString, 2).toString(16).padStart(8, '0').toUpperCase();
     gnome[g] = geneHex;
   }
   return gnome;
