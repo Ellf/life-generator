@@ -50,8 +50,8 @@ function runStep() {
     }
 
     // Let the brain decide and perform the action
-    const chosenAction = currentLifeform.processBrain(occupiedCells);
-    currentLifeform.performAction(chosenAction, occupiedCells);
+    const actionLevels = currentLifeform.processBrain(occupiedCells);
+    currentLifeform.executeActions(actionLevels, occupiedCells);
   }
 
   // 3. Update UI
