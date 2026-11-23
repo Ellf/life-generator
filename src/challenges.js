@@ -71,6 +71,45 @@ export function applyChallenge() {
   challenge.walls(GLOBAL.barrierGrid);
   GLOBAL.spawnZone = challenge.spawn();
   GLOBAL.goalZone = challenge.goal ? RIGHT_GOAL() : null;
+  GLOBAL.goalDistance = GLOBAL.goalZone ? walkingDistanceTo(GLOBAL.goalZone) : null;
+}
+
+/**
+ * Walking distance (in moves) from every cell to the nearest goal cell, going round walls.
+ * Lifeforms can move diagonally, so this is a breadth-first search over all 8 neighbours.
+ * Walls and unreachable cells get Infinity. Using walking distance rather than a straight
+ * line matters: in the cup, the straight-line-closest spot is the dead end at its back.
+ */
+function walkingDistanceTo(zone) {
+  const W = GLOBAL.x, H = GLOBAL.y, grid = GLOBAL.barrierGrid;
+  const dist = new Float64Array(W * H).fill(Infinity);
+  const queue = new Int32Array(W * H);
+  let head = 0, tail = 0;
+  for (let y = zone.y0; y <= zone.y1; y++) {
+    for (let x = zone.x0; x <= zone.x1; x++) {
+      const i = y * W + x;
+      if (!grid[i]) { dist[i] = 0; queue[tail++] = i; }
+    }
+  }
+  while (head < tail) {
+    const i = queue[head++];
+    const x = i % W, y = (i - x) / W;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if ((dx || dy) && nx >= 0 && nx < W && ny >= 0 && ny < H) {
+          const n = ny * W + nx;
+          if (!grid[n] && dist[n] === Infinity) { dist[n] = dist[i] + 1; queue[tail++] = n; }
+        }
+      }
+    }
+  }
+  return dist;
+}
+
+/** How far this lifeform is from the goal on foot (0 = inside it). */
+export function distanceToGoal(lifeform) {
+  return GLOBAL.goalDistance ? GLOBAL.goalDistance[lifeform.pos_y * GLOBAL.x + lifeform.pos_x] : 0;
 }
 
 export function inZone(zone, x, y) {
