@@ -23,7 +23,12 @@ export default {
   foodCount: 40,
   foodEnergy: 100,
   foodGrid: [],
-  foodEnergyEnabled: true,
+  foodEnergyEnabled: false, // off by default: the default challenge is about reaching the goal
+  challenge: 'gap',          // key into CHALLENGES (challenges.js)
+  barrierGrid: [],           // Uint8Array, 1 = wall, indexed y * x + x
+  spawnZone: null,
+  goalZone: null,
+  history: [],               // one { generation, percent } entry per finished generation
   pheromoneGrid: [],
   pheromoneStrength: 100,
   pheromoneEvapRate: 1,

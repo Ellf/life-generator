@@ -4,7 +4,8 @@ import { startSimulation, stopSimulation } from './simulator.js';
 import SENS from './sensor.js';
 import ACTS from './action.js';
 import { logToPage, randomInt, mutateGeneBit } from './utils.js';
-import Life, { parseGene } from './life.js';
+import Life, { parseGene, isBlocked } from './life.js';
+import { CHALLENGES, applyChallenge, inZone, qualifies } from './challenges.js';
 
 const DIRECTIONS = ['N', 'E', 'S', 'W'];
 const SELECTED_COLOR = 'orange';
@@ -34,6 +35,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const foodEnergyCheckbox = document.getElementById('toggle-food-energy');
   foodEnergyCheckbox.checked = GLOBAL.foodEnergyEnabled;
+
+  const challengeSelect = document.getElementById('challenge-select');
+  for (const [key, challenge] of Object.entries(CHALLENGES)) {
+    challengeSelect.add(new Option(challenge.label, key, false, key === GLOBAL.challenge));
+  }
+  challengeSelect.addEventListener('change', () => {
+    GLOBAL.challenge = challengeSelect.value;
+    const challenge = CHALLENGES[GLOBAL.challenge];
+    // Goal challenges run without food by default, so starving doesn't mask who reached the goal.
+    GLOBAL.foodEnergyEnabled = !challenge.goal;
+    foodEnergyCheckbox.checked = GLOBAL.foodEnergyEnabled;
+    restartWorld(`Challenge: ${challenge.label}. Restarting world...`);
+  });
+
+  window.addEventListener('resize', drawHistoryChart);
   foodEnergyCheckbox.addEventListener('change', (event) => {
     // Applied live, so the current run and its evolution carry on.
     // Food already on the map is kept while disabled (drawing and sensors check the flag),
@@ -111,6 +127,13 @@ export function updateStatus() {
   document.getElementById('generation-value').textContent = GLOBAL.generation;
   document.getElementById('year-value').textContent = `${GLOBAL.yearCounter} / ${GLOBAL.generationLength}`;
   document.getElementById('population-value').textContent = `${alive} / ${GLOBAL.lifeform.length}`;
+
+  const goalStat = document.getElementById('goal-stat');
+  goalStat.hidden = !GLOBAL.goalZone;
+  if (GLOBAL.goalZone) {
+    const inGoal = GLOBAL.lifeform.filter(lf => lf.alive && inZone(GLOBAL.goalZone, lf.pos_x, lf.pos_y)).length;
+    document.getElementById('goal-value').textContent = `${inGoal} / ${GLOBAL.lifeform.length}`;
+  }
 }
 
 function selectLifeform(id) {
@@ -298,23 +321,11 @@ function drawBrainCanvas(lifeform) {
 async function setupWorld(isNewGeneration = false) {
   if (!isNewGeneration) {
     GLOBAL.generation = 0;
-    GLOBAL.lifeform = [];
-
-    // This gene means: SENSOR[AGE] -> ACTION[EMIT_SIGNAL1_PHER]
-    // (The older it gets, the more it emits)
-    const pheromoneGene = '0E887FFF';
-
-    for (let g = 0; g < GLOBAL.startingLife; g++) {
-      const newLifeform = new Life(g, GLOBAL.generation);
-      // For the first 10 lifeforms, "seed" the pheromone gene
-      if (g < 10) {
-        newLifeform.genome[0] = pheromoneGene;
-        newLifeform.brain = newLifeform.genome.map(gene => parseGene(gene));
-      }
-      GLOBAL.lifeform[g] = newLifeform;
-    }
+    GLOBAL.history = [];
+    GLOBAL.lifeform = randomPopulation(0);
   }
 
+  applyChallenge();
   GLOBAL.pheromoneGrid = new Array(GLOBAL.y).fill(0).map(() => new Array(GLOBAL.x).fill(0));
   GLOBAL.yearCounter = 0;
 
@@ -336,7 +347,25 @@ async function setupWorld(isNewGeneration = false) {
   updateSelectedLifeformUI();
   updateLifeformTable();
   drawWorld();
+  drawHistoryChart();
   return true;
+}
+
+function randomPopulation(generation) {
+  // This gene means: SENSOR[AGE] -> ACTION[EMIT_SIGNAL1_PHER]
+  // (The older it gets, the more it emits)
+  const pheromoneGene = '0E887FFF';
+  const population = [];
+  for (let g = 0; g < GLOBAL.startingLife; g++) {
+    const newLifeform = new Life(g, generation);
+    // For the first 10 lifeforms, "seed" the pheromone gene
+    if (g < 10) {
+      newLifeform.genome[0] = pheromoneGene;
+      newLifeform.brain = newLifeform.genome.map(gene => parseGene(gene));
+    }
+    population.push(newLifeform);
+  }
+  return population;
 }
 
 function sizeWorldCanvas() {
@@ -380,6 +409,33 @@ function drawWorld() {
   const cx = x => x * w + w / 2;
   const cy = y => y * h + h / 2;
   worldCtx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
+
+  // Start and goal zones, then walls
+  const shadeZone = (zone, fill, stroke) => {
+    if (!zone) return;
+    const zx = zone.x0 * w, zy = zone.y0 * h;
+    const zw = (zone.x1 - zone.x0 + 1) * w, zh = (zone.y1 - zone.y0 + 1) * h;
+    worldCtx.fillStyle = fill;
+    worldCtx.fillRect(zx, zy, zw, zh);
+    if (stroke) {
+      worldCtx.strokeStyle = stroke;
+      worldCtx.lineWidth = 2;
+      worldCtx.setLineDash([6, 4]);
+      worldCtx.strokeRect(zx + 1, zy + 1, zw - 2, zh - 2);
+      worldCtx.setLineDash([]);
+    }
+  };
+  if (GLOBAL.goalZone) shadeZone(GLOBAL.spawnZone, 'rgba(255, 255, 255, 0.05)');
+  shadeZone(GLOBAL.goalZone, 'rgba(41, 157, 224, 0.2)', 'rgba(41, 157, 224, 0.8)');
+
+  if (GLOBAL.barrierGrid.length) {
+    worldCtx.fillStyle = '#8a8f98';
+    for (let y = 0; y < GLOBAL.y; y++) {
+      for (let x = 0; x < GLOBAL.x; x++) {
+        if (GLOBAL.barrierGrid[y * GLOBAL.x + x]) worldCtx.fillRect(x * w, y * h, w, h);
+      }
+    }
+  }
 
   // Pheromones
   const grid = GLOBAL.pheromoneGrid;
@@ -440,18 +496,19 @@ function drawWorld() {
 }
 
 function placeLifeformsOnGrid() {
+  // Put every lifeform on a free, wall-free cell inside the challenge's start zone.
+  const zone = GLOBAL.spawnZone;
   const occupied = new Set();
   for (const lifeform of GLOBAL.lifeform) {
-    let tries = 0;
-    // If this spawn location is already occupied, pick a new one
-    while (occupied.has(`${lifeform.pos_x}-${lifeform.pos_y}`) && tries < 500) {
-      lifeform.pos_x = randomInt(0, GLOBAL.x);
-      lifeform.pos_y = randomInt(0, GLOBAL.y);
-      lifeform.old_x = lifeform.pos_x;
-      lifeform.old_y = lifeform.pos_y;
+    let x, y, tries = 0;
+    do {
+      x = randomInt(zone.x0, zone.x1 + 1);
+      y = randomInt(zone.y0, zone.y1 + 1);
       tries++;
-    }
-    occupied.add(`${lifeform.pos_x}-${lifeform.pos_y}`);
+    } while ((isBlocked(x, y) || occupied.has(`${y}-${x}`)) && tries < 1000);
+    lifeform.pos_x = lifeform.old_x = x;
+    lifeform.pos_y = lifeform.old_y = y;
+    occupied.add(`${y}-${x}`);
   }
 }
 
@@ -459,8 +516,9 @@ function spawnFood() {
   GLOBAL.foodGrid = [];
   if (!GLOBAL.foodEnergyEnabled) return;
   while (GLOBAL.foodGrid.length < GLOBAL.foodCount) {
-    const pos = `${randomInt(0, GLOBAL.y)}-${randomInt(0, GLOBAL.x)}`; // 'y-x'
-    if (!GLOBAL.foodGrid.includes(pos)) GLOBAL.foodGrid.push(pos);
+    const x = randomInt(0, GLOBAL.x), y = randomInt(0, GLOBAL.y);
+    const pos = `${y}-${x}`; // 'y-x'
+    if (!isBlocked(x, y) && !GLOBAL.foodGrid.includes(pos)) GLOBAL.foodGrid.push(pos);
   }
 }
 
@@ -505,41 +563,127 @@ export function updateLifeformTable() {
 export async function createNewGeneration() {
   stopSimulation();
 
-  // 1. SELECTION: Find all living lifeforms and sort them by energy (highest first)
-  const survivors = GLOBAL.lifeform
-    .filter(lf => lf.alive)
-    .sort((a, b) => b.energy - a.energy);
+  // 1. SELECTION: lifeforms that met the challenge (alive, and in the goal zone if there is one),
+  // fittest (highest energy) first.
+  const parents = GLOBAL.lifeform.filter(qualifies).sort((a, b) => b.energy - a.energy);
+  const total = GLOBAL.lifeform.length;
+  const percent = total ? Math.round((parents.length / total) * 100) : 0;
+  GLOBAL.history.push({ generation: GLOBAL.generation, percent });
 
-  // Handle extinction
-  if (survivors.length === 0) {
-    const lostGeneration = GLOBAL.generation;
-    logToPage('EXTINCTION! No lifeforms survived. Restarting with a new random population.');
-    await setupWorld();
-    setStatusMessage(`Everyone died in generation ${lostGeneration}. Started again with a new random population.`);
-    startSimulation(GLOBAL.generationLength);
-    return;
-  }
+  const what = GLOBAL.goalZone ? 'reached the goal' : 'survived';
+  logToPage(`${parents.length} of ${total} lifeforms ${what} (${percent}%).`);
 
+  const endedGeneration = GLOBAL.generation;
   GLOBAL.generation++;
-  setStatusMessage(''); // a generation survived, so any old extinction notice is stale
-  logToPage(`${survivors.length} of ${GLOBAL.lifeform.length} lifeforms survived.`);
 
-  // 2. REPRODUCTION: Create a new population from the fittest survivors.
-  // Fitter individuals are earlier in the list, so they may parent more than once.
-  const newLifeforms = [];
-  for (let i = 0; i < GLOBAL.startingLife; i++) {
-    const parent = survivors[i % survivors.length];
-    // 3. MUTATION: flip a bit in each gene with probability mutation_rate
-    const newGenome = parent.genome.map(gene =>
-      Math.random() < GLOBAL.mutation_rate ? mutateGeneBit(gene) : gene
-    );
-    newLifeforms.push(new Life(i, GLOBAL.generation, newGenome));
+  let newLifeforms;
+  if (parents.length === 0) {
+    // Nobody to breed from: carry on with fresh random brains, keeping the generation count and chart.
+    const reason = GLOBAL.goalZone ? 'Nobody reached the goal' : 'Everyone died';
+    logToPage(`${reason} in generation ${endedGeneration}. Next generation starts from random brains.`);
+    setStatusMessage(`${reason} in generation ${endedGeneration}, so generation ${GLOBAL.generation} starts from random brains.`);
+    newLifeforms = randomPopulation(GLOBAL.generation);
+  } else {
+    setStatusMessage(''); // a generation succeeded, so any old notice is stale
+    // 2. REPRODUCTION: fitter parents are earlier in the list, so they may parent more than once.
+    newLifeforms = [];
+    for (let i = 0; i < GLOBAL.startingLife; i++) {
+      const parent = parents[i % parents.length];
+      // 3. MUTATION: flip a bit in each gene with probability mutation_rate
+      const newGenome = parent.genome.map(gene =>
+        Math.random() < GLOBAL.mutation_rate ? mutateGeneBit(gene) : gene
+      );
+      newLifeforms.push(new Life(i, GLOBAL.generation, newGenome));
+    }
   }
 
   GLOBAL.lifeform = newLifeforms;
   await setupWorld(true);
   logToPage(`--- Beginning Generation ${GLOBAL.generation} ---`);
   startSimulation(GLOBAL.generationLength);
+}
+
+// --- Progress chart: % of each generation that met the challenge ---
+function drawHistoryChart() {
+  const canvas = document.getElementById('history-chart');
+  const history = GLOBAL.history;
+  const what = GLOBAL.goalZone ? 'Reached the goal' : 'Survived';
+  document.getElementById('progress-title').textContent = `Progress: ${what.toLowerCase()} per generation`;
+
+  const summary = document.getElementById('progress-summary');
+  if (!history.length) {
+    summary.textContent = 'The chart fills in as each generation finishes.';
+  } else {
+    const last = history[history.length - 1];
+    const best = Math.max(...history.map(h => h.percent));
+    summary.textContent = `Last: ${last.percent}% (gen ${last.generation}) · Best: ${best}% · Blue = each generation, orange = 10-generation average`;
+  }
+
+  // Size the canvas to its displayed width, so the 16px labels are never scaled down.
+  const width = canvas.clientWidth;
+  if (!width) return;
+  if (canvas.width !== width) canvas.width = width;
+  const height = canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+
+  const left = 56, right = 16, top = 14, bottom = 34;
+  const plotW = width - left - right, plotH = height - top - bottom;
+  const yFor = pct => top + plotH * (1 - pct / 100);
+
+  ctx.font = '16px Segoe UI, Arial, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#c0c0c0';
+  ctx.strokeStyle = '#3a3a3a';
+  ctx.lineWidth = 1;
+  for (const pct of [0, 50, 100]) {
+    const y = yFor(pct);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(width - right, y);
+    ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.fillText(`${pct}%`, left - 8, y);
+  }
+  if (!history.length) return;
+
+  const n = history.length;
+  const xFor = i => left + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
+
+  // Generation numbers along the bottom: first and last.
+  ctx.textBaseline = 'top';
+  ctx.textAlign = n === 1 ? 'center' : 'left';
+  ctx.fillText(`gen ${history[0].generation}`, xFor(0), top + plotH + 8);
+  if (n > 1) {
+    ctx.textAlign = 'right';
+    ctx.fillText(`gen ${history[n - 1].generation}`, xFor(n - 1), top + plotH + 8);
+  }
+
+  const drawSeries = (values, color, lineWidth) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    values.forEach((v, i) => (i ? ctx.lineTo(xFor(i), yFor(v)) : ctx.moveTo(xFor(i), yFor(v))));
+    ctx.stroke();
+  };
+
+  const values = history.map(h => h.percent);
+  drawSeries(values, '#299de0', 2);
+  if (n <= 60) {
+    ctx.fillStyle = '#299de0';
+    values.forEach((v, i) => {
+      ctx.beginPath();
+      ctx.arc(xFor(i), yFor(v), 3, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  }
+
+  // 10-generation rolling average, to show the trend through the noise.
+  const avg = values.map((_, i) => {
+    const slice = values.slice(Math.max(0, i - 9), i + 1);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
+  if (n > 1) drawSeries(avg, 'orange', 3);
 }
 
 export { drawWorld };
