@@ -35,8 +35,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const foodEnergyCheckbox = document.getElementById('toggle-food-energy');
   foodEnergyCheckbox.checked = GLOBAL.foodEnergyEnabled;
   foodEnergyCheckbox.addEventListener('change', (event) => {
+    // Applied live, so the current run and its evolution carry on.
     GLOBAL.foodEnergyEnabled = event.target.checked;
-    restartWorld(`Food/energy ${GLOBAL.foodEnergyEnabled ? 'enabled' : 'disabled'}. Restarting world...`);
+    spawnFood();
+    logToPage(`Food/energy ${GLOBAL.foodEnergyEnabled ? 'enabled' : 'disabled'}.`);
+    updateSelectedLifeformUI();
+    updateLifeformTable();
+    drawWorld();
   });
 
   const tabLinks = document.querySelectorAll('.tab-link');
