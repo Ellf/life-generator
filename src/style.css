@@ -51,6 +51,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 0 1 516px; /* hug the world canvas (512px + border) */
   max-width: 100%;
 }
 
@@ -372,6 +373,9 @@ tbody tr:hover {
   .universe {
     flex-direction: column;
     align-items: stretch;
+  }
+  .left-panel {
+    flex: 0 0 auto;
   }
   .right-panel {
     width: 100%;
