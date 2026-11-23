@@ -1,3 +1,10 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lifeform Simulator</title>
+</head>
 <body>
 <header class="main-header">
     <h1>Lifeform Simulator</h1>
@@ -6,78 +13,81 @@
 <div class="universe">
     <div class="left-panel">
         <div class="world-container">
-            <canvas class="world"></canvas>
+            <canvas class="world" title="Click a lifeform to inspect it"></canvas>
         </div>
+        <p class="hint">Click a lifeform to inspect it. Orange ring = selected, green = food, red ✕ = died.</p>
         <div class="primary-controls">
             <div class="stats-card">
-                <h3>Simulation Status</h3>
-                <div class="stat-item" id="generation-stat">
-                    <strong>Generation:</strong> <span id="generation-value">0</span>
-                </div>
-                <div class="stat-item" id="year-stat">
-                    <strong>Year:</strong> <span id="year-value">0</span>
+                <h3>Simulation</h3>
+                <div class="stat-item">
+                    <strong>Generation</strong> <span id="generation-value">0</span>
                 </div>
                 <div class="stat-item">
-                    <strong>Population:</strong> <span id="population-value">-</span>
+                    <strong>Year</strong> <span id="year-value">0</span>
                 </div>
+                <div class="stat-item">
+                    <strong>Alive</strong> <span id="population-value">-</span>
+                </div>
+                <div id="status-message" class="status-message" role="status" hidden></div>
             </div>
             <div class="controls-card">
                 <div class="button-group">
-                    <button id="regenerateWorld">Restart</button>
-                    <button id="toggleSimulation">Pause</button>
-                    <button id="continueSimulation">Continue</button>
+                    <button id="toggleSimulation" class="primary">Pause</button>
+                    <button id="regenerateWorld" class="danger" title="Start again with a new random population">Restart</button>
                 </div>
-                <div class="stat-item" style="margin-top: 15px;">
-                    <label for="speed-slider">Speed:</label>
-                    <input type="range" id="speed-slider" min="1" max="200" value="50">
+                <div class="control-row">
+                    <label for="speed-slider">Speed</label>
+                    <div class="slider-row">
+                        <span>Slow</span>
+                        <input type="range" id="speed-slider" min="1" max="200" value="150">
+                        <span>Fast</span>
+                    </div>
                 </div>
-                <div class="stat-item">
+                <div class="control-row checkbox-row">
                     <input type="checkbox" id="toggle-food-energy" checked>
-                    <label for="toggle-food-energy" style="user-select:none;">Enable Food/Energy</label>
+                    <label for="toggle-food-energy">Food &amp; energy <span class="muted">(restarts the world)</span></label>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="right-panel">
-        <div class="tab-nav">
-            <button class="tab-link active" data-tab="tab-selection">Selected</button>
-            <button class="tab-link" data-tab="tab-events">
-                Events
-            </button>
-            <button class="tab-link" data-tab="tab-population">Population</button>
-            <button class="tab-link" data-tab="tab-log">Log</button>
+        <div class="tab-nav" role="tablist">
+            <button class="tab-link active" data-tab="tab-selection" role="tab">Selected</button>
+            <button class="tab-link" data-tab="tab-population" role="tab">Population</button>
+            <button class="tab-link" data-tab="tab-log" role="tab">Log</button>
         </div>
 
         <div id="tab-selection" class="tab-content active">
             <div class="lifeform-data">
                 <div class="lifeform-card">
-                    <h3>Selected Lifeform</h3>
-                    <div id="cell-selected"><strong>ID:</strong> <span>-</span></div>
-                    <div id="posx"><strong>Position X:</strong> <span>-</span></div>
-                    <div id="posy"><strong>Position Y:</strong> <span>-</span></div>
-                    <div id="energy"><strong>Energy:</strong> <span>-</span></div>
-                    <hr>
-                    <div id="genome-length"><strong>Genome Length:</strong> <span>-</span></div>
-                    <div id="sensory-inputs"><strong>Sensory Inputs:</strong> <span>-</span></div>
-                    <div id="inner-neurons"><strong>Inner Neurons:</strong> <span>-</span></div>
-                    <div id="action-outputs"><strong>Action Outputs:</strong> <span>-</span></div>
+                    <h3>Selected lifeform</h3>
+                    <div class="stat-item" id="cell-selected"><strong>ID</strong> <span>-</span></div>
+                    <div class="stat-item" id="position"><strong>Position</strong> <span>-</span></div>
+                    <div class="stat-item" id="energy"><strong>Energy</strong> <span>-</span></div>
+                    <div class="stat-item" id="age"><strong>Age</strong> <span>-</span></div>
+                    <div class="stat-item" id="last-action"><strong>Last action</strong> <span>-</span></div>
                 </div>
-                <div id="brain-debug-table"></div>
+                <div class="life-action-log-card">
+                    <h3>Recent events</h3>
+                    <div id="life-action-log"></div>
+                </div>
             </div>
             <div class="brain-card">
-                <h3>Brain (Genome) <span id="genome-raw-output"></span></h3>
-                <div class="brain-details">
-                    <canvas id="brain-canvas" width="600" height="500"
-                        style="background:#292d38;display:block;margin:10px auto 0 auto;border-radius:10px;"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-events" class="tab-content">
-            <div class="life-action-log-card">
-                <h3>Lifeform Events</h3>
-                <div id="life-action-log"></div>
+                <h3>Brain</h3>
+                <p class="legend">
+                    <span class="dot sensor"></span> Sensor
+                    <span class="dot neuron"></span> Neuron
+                    <span class="dot action"></span> Action
+                    <span class="line positive"></span> Excites
+                    <span class="line negative"></span> Inhibits
+                </p>
+                <canvas id="brain-canvas" width="720" height="500"></canvas>
+                <div class="genome"><strong>Genome:</strong> <span id="genome-raw-output">-</span></div>
+                <details id="brain-debug">
+                    <summary>Last brain step (debug)</summary>
+                    <div id="brain-debug-table"></div>
+                </details>
             </div>
         </div>
 
@@ -94,12 +104,12 @@
                         <th>Age</th>
                         <th>Dir</th>
                         <th>Action</th>
-                        <th>Select</th>
                     </tr>
                     </thead>
                     <tbody id="lifeform-table-body"></tbody>
                 </table>
             </div>
+            <p class="hint">Click a row to select that lifeform.</p>
         </div>
 
         <div id="tab-log" class="tab-content">
@@ -111,3 +121,4 @@
     </div>
 </div>
 </body>
+</html>

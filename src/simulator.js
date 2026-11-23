@@ -1,7 +1,6 @@
 import GLOBAL from './globals.js';
-import {updateSelectedLifeformUI, createNewGeneration, updateLifeformTable} from './index.js';
-import {logToPage} from "./utils";
-import { drawWorld, drawBrainCanvas } from './index.js';
+import { updateSelectedLifeformUI, createNewGeneration, updateLifeformTable, updateStatus, drawWorld } from './index.js';
+import { logToPage } from './utils.js';
 
 let simulationTimeout = null;
 
@@ -19,8 +18,8 @@ function updatePheromones() {
 }
 
 function runStep() {
+  simulationTimeout = null;
   if (GLOBAL.yearCounter >= GLOBAL.targetYear || GLOBAL.isPaused) {
-    stopSimulation();
     return;
   }
 
@@ -36,8 +35,7 @@ function runStep() {
   });
 
   // 2. Main loop: Age, apply energy cost, and act.
-  for (let i = 0; i < GLOBAL.lifeform.length; i++) {
-    const currentLifeform = GLOBAL.lifeform[i];
+  for (const currentLifeform of GLOBAL.lifeform) {
     if (!currentLifeform.alive) continue;
 
     // Apply cost of living and age up
@@ -46,14 +44,9 @@ function runStep() {
     // Only kill by energy if enabled
     if (GLOBAL.foodEnergyEnabled && currentLifeform.energy <= 0) {
       currentLifeform.alive = false;
-      currentLifeform.color = [200, 50, 50]; // Change color to a dim red
-      const deadCell = document.querySelector(`.world [data-id='${currentLifeform.id}']`);
-      if (deadCell) {
-        deadCell.style.background = `rgb(${currentLifeform.color[0]}, ${currentLifeform.color[1]}, ${currentLifeform.color[2]})`;
-        deadCell.classList.add('dead-cell'); // Add a class for styling
-      }
-      drawWorld();
-      continue; // Lifeform dies, skip to the next one
+      currentLifeform.color = [200, 50, 50];
+      currentLifeform.actionLog.push(`Starved at (${currentLifeform.pos_x},${currentLifeform.pos_y}) [age=${currentLifeform.age}]`);
+      continue;
     }
 
     // Let the brain decide and perform the action
@@ -63,31 +56,25 @@ function runStep() {
 
   // 3. Update UI
   GLOBAL.yearCounter += 1;
-  document.querySelector('#year-value').textContent = GLOBAL.yearCounter;
-  document.getElementById('population-value').textContent =
-    GLOBAL.lifeform.filter(lf => lf.alive).length;
+  updateStatus();
   updateSelectedLifeformUI();
   updateLifeformTable();
+  drawWorld();
 
-  // 4. Check for End of Generation (Moved to before the next step)
-  if (GLOBAL.yearCounter > 0 && GLOBAL.yearCounter % GLOBAL.generationLength === 0) {
-    stopSimulation();
-    logToPage(`--- End of Generation ${GLOBAL.generation} ---`);
+  // 4. End the generation when its time is up, or straight away if everyone has died.
+  const anyAlive = GLOBAL.lifeform.some(lf => lf.alive);
+  if (!anyAlive || GLOBAL.yearCounter % GLOBAL.generationLength === 0) {
+    logToPage(`--- End of Generation ${GLOBAL.generation} (year ${GLOBAL.yearCounter}) ---`);
     createNewGeneration(); // This function will restart the simulation
-    return; // IMPORTANT: Stop this loop from continuing
+    return;
   }
 
   // 5. Schedule the NEXT step
-  drawWorld();
-  drawBrainCanvas(GLOBAL.selectedLifeformId);
   simulationTimeout = setTimeout(runStep, GLOBAL.simulationSpeed);
 }
 
 function startSimulation(steps) {
-  // If we're adding steps to a running sim, just update the target
-  if (!simulationTimeout && steps > 0) {
-    GLOBAL.targetYear += steps;
-  } else if (steps > 0) {
+  if (steps > 0) {
     GLOBAL.targetYear = GLOBAL.yearCounter + steps;
   }
 

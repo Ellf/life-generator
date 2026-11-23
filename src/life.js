@@ -400,8 +400,8 @@ export default class Life {
         if (dy !== 0) {
           moved = this._move(0, dy, this.direction, occupiedCells);
           if (moved) {
-            this.lastAction = `MOVE_Y to ${this.pos_y},${this.pos_y}`;
-            this.actionLog.push(`MOVE_Y to ${this.pos_y},${this.pos_y}`);
+            this.lastAction = `MOVE_Y to (${this.pos_x},${this.pos_y})`;
+            this.actionLog.push(`MOVE_Y to (${this.pos_x},${this.pos_y})`);
           }
         } else {
           this.lastAction = 'MOVE_Y (no move)';
@@ -476,22 +476,12 @@ export default class Life {
     this.pos_x = newX;
     this.pos_y = newY;
 
-    // 5. Update the visual position on the grid.
-    updatePosition(this.id, this.pos_x, this.pos_y, this.old_x, this.old_y);
-
     // 6. Check for death after the move.
     if (GLOBAL.foodEnergyEnabled && this.energy <= 0) {
       this.alive = false;
       this.actionLog.push("Died at (" + this.pos_x + "," + this.pos_y + ") [age=" + this.age + "]");
       if (this.actionLog.length > 100) this.actionLog.shift()
       this.color = [200, 50, 50]; // Red color for dead
-
-      const deadCell = document.querySelector(`.world [data-xy='${this.pos_x}-${this.pos_y}']`);
-      if (deadCell) {
-        deadCell.style.background = `rgb(${this.color[0]}, ${this.color[1]}, ${this.color[2]})`;
-        deadCell.classList.remove('live-cell');
-        deadCell.classList.add('dead-cell');
-      }
       return false; // Move was fatal.
     }
 
@@ -518,7 +508,7 @@ export default class Life {
   
   checkForFood() {
     if (!GLOBAL.foodEnergyEnabled) return;
-    const currentPos = `${this.pos_x}-${this.pos_y}`;
+    const currentPos = `${this.pos_y}-${this.pos_x}`; // foodGrid keys are 'y-x'
     const foodIndex = GLOBAL.foodGrid.indexOf(currentPos);
     
     if (foodIndex > -1) {
@@ -526,12 +516,6 @@ export default class Life {
       this.actionLog.push("Ate food (+energy) @ (" + this.pos_x + "," + this.pos_y + ")");
       if (this.actionLog.length > 100) this.actionLog.shift()
       GLOBAL.foodGrid.splice(foodIndex, 1); // Remove food from the data array
-      
-      // Remove the food visual from the grid
-      const foodCell = document.querySelector(`.world [data-xy='${currentPos}']`);
-      if (foodCell) {
-        foodCell.classList.remove('food-cell');
-      }
     }
   }
 
@@ -589,32 +573,6 @@ export function createGenome(glength) {
     gnome[g] = geneHex;
   }
   return gnome;
-}
-
-function updatePosition(id, new_x, new_y, old_x, old_y) {
-  // We only need a single, simple timeout now
-  setTimeout(() => {
-    // --- Handle Old Cell ---
-    const oldCell = document.querySelector(`.world [data-xy='${old_x}-${old_y}']`);
-    if (oldCell) {
-      // Simply reset its background and remove the classes
-      oldCell.style.background = '';
-      oldCell.classList.remove('live-cell', 'selected-cell');
-      delete oldCell.dataset.id;
-    }
-
-    // --- Handle New Cell ---
-    const newCell = document.querySelector(`.world [data-xy='${new_x}-${new_y}']`);
-    if (newCell) {
-      newCell.style.background = `rgb(${GLOBAL.lifeform[id].color[0]}, ${GLOBAL.lifeform[id].color[1]}, ${GLOBAL.lifeform[id].color[2]})`;
-      newCell.classList.add('live-cell');
-      newCell.dataset.id = id;
-
-      if (id === GLOBAL.selectedLifeformId) {
-        newCell.classList.add('selected-cell');
-      }
-    }
-  }, 100); // A simple delay for all animations
 }
 
 /**
