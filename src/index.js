@@ -6,7 +6,7 @@ import ACTS from './action.js';
 import { logToPage, randomInt } from './utils.js';
 import { makeChildGenome, shuffle } from './genetics.js';
 import Life, { parseGene, isBlocked } from './life.js';
-import { CHALLENGES, applyChallenge, inZone, qualifies } from './challenges.js';
+import { CHALLENGES, applyChallenge, inZone, qualifies, distanceToGoal } from './challenges.js';
 
 const DIRECTIONS = ['N', 'E', 'S', 'W'];
 const SELECTED_COLOR = 'orange';
@@ -568,35 +568,48 @@ export function updateLifeformTable() {
 export async function createNewGeneration() {
   stopSimulation();
 
-  // 1. SELECTION: lifeforms that met the challenge (alive, and in the goal zone if there is one),
-  // fittest (highest energy) first. Shuffling first means ties don't always favour the same ids.
-  const parents = shuffle(GLOBAL.lifeform.filter(qualifies)).sort((a, b) => b.energy - a.energy);
+  // 1. SELECTION. The chart records the true share that met the challenge
+  // (alive, and in the goal zone if there is one).
   const total = GLOBAL.lifeform.length;
-  const percent = total ? Math.round((parents.length / total) * 100) : 0;
+  const winners = GLOBAL.lifeform.filter(qualifies);
+  const percent = total ? Math.round((winners.length / total) * 100) : 0;
   GLOBAL.history.push({ generation: GLOBAL.generation, percent });
 
   const what = GLOBAL.goalZone ? 'reached the goal' : 'survived';
-  logToPage(`${parents.length} of ${total} lifeforms ${what} (${percent}%).`);
+  logToPage(`${winners.length} of ${total} lifeforms ${what} (${percent}%).`);
+
+  // Partial credit: rank everyone by how close they got (walking distance round walls),
+  // or, with no goal, by how long they lived. If too few met the challenge, the next-best
+  // also breed, so one unlucky generation can never wipe out what has been learned.
+  // Shuffling first means ties don't always favour the same ids.
+  // Survivors rank above the dead; dead ones still count by how far they got or how long they lasted.
+  const fitness = GLOBAL.goalZone ? lf => -distanceToGoal(lf) : lf => lf.age;
+  const pool = shuffle(GLOBAL.lifeform.slice());
+  pool.sort((a, b) => (b.alive - a.alive) || (fitness(b) - fitness(a))); // fittest first, as makeChildGenome expects
+
+  const minParents = Math.max(2, Math.ceil(total * GLOBAL.minParentShare));
+  const parents = winners.length >= minParents ? pool.filter(qualifies) : pool.slice(0, minParents);
 
   const endedGeneration = GLOBAL.generation;
   GLOBAL.generation++;
 
-  let newLifeforms;
-  if (parents.length === 0) {
-    // Nobody to breed from: carry on with fresh random brains, keeping the generation count and chart.
-    const reason = GLOBAL.goalZone ? 'Nobody reached the goal' : 'Everyone died';
-    logToPage(`${reason} in generation ${endedGeneration}. Next generation starts from random brains.`);
-    setStatusMessage(`${reason} in generation ${endedGeneration}, so generation ${GLOBAL.generation} starts from random brains.`);
-    newLifeforms = randomPopulation(GLOBAL.generation);
+  if (winners.length < minParents) {
+    const extra = parents.length - winners.length;
+    const message = GLOBAL.goalZone
+      ? `Only ${winners.length} reached the goal in generation ${endedGeneration}, so the ${extra} that got closest also bred.`
+      : `Only ${winners.length} survived generation ${endedGeneration}, so the ${extra} that lived longest also bred.`;
+    logToPage(message);
+    setStatusMessage(message);
   } else {
-    setStatusMessage(''); // a generation succeeded, so any old notice is stale
-    // 2. REPRODUCTION and 3. MUTATION, as biosim4 does it: each child mixes two parents
-    // (fitter ones picked more often), then may get a few random bit flips.
-    const parentGenomes = parents.map(p => p.genome);
-    newLifeforms = [];
-    for (let i = 0; i < GLOBAL.startingLife; i++) {
-      newLifeforms.push(new Life(i, GLOBAL.generation, makeChildGenome(parentGenomes)));
-    }
+    setStatusMessage('');
+  }
+
+  // 2. REPRODUCTION and 3. MUTATION, as biosim4 does it: each child mixes two parents
+  // (fitter ones picked more often), then may get a few random bit flips.
+  const parentGenomes = parents.map(p => p.genome);
+  const newLifeforms = [];
+  for (let i = 0; i < GLOBAL.startingLife; i++) {
+    newLifeforms.push(new Life(i, GLOBAL.generation, makeChildGenome(parentGenomes)));
   }
 
   GLOBAL.lifeform = newLifeforms;

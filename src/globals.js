@@ -31,6 +31,8 @@ export default {
   barrierGrid: [],           // Uint8Array, 1 = wall, indexed y * x + x
   spawnZone: null,
   goalZone: null,
+  goalDistance: null,        // walking distance to the goal for every cell (challenges.js)
+  minParentShare: 0.1,       // if fewer than this share meet the challenge, the next-best also breed
   history: [],               // one { generation, percent } entry per finished generation
   pheromoneGrid: [],
   pheromoneStrength: 100,
