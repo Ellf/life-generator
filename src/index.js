@@ -54,6 +54,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       tabContents.forEach(item => item.classList.remove('active'));
       link.classList.add('active');
       document.getElementById(link.dataset.tab).classList.add('active');
+      if (link.dataset.tab === 'tab-log') {
+        // The log can't auto-scroll while hidden, so jump to the newest entries on open.
+        const log = document.getElementById('log-output');
+        log.scrollTop = log.scrollHeight;
+      }
       // Bring the newly visible panel up to date straight away, even when paused.
       updateSelectedLifeformUI();
       updateLifeformTable();
@@ -211,7 +216,7 @@ function drawBrainCanvas(lifeform) {
 
   // 2. Node positions per column. Side columns leave room for 16px labels.
   const nodeR = 16;
-  const nodeX = [canvas.width * 0.34, canvas.width * 0.5, canvas.width * 0.66];
+  const nodeX = [canvas.width * 0.35, canvas.width * 0.5, canvas.width * 0.65];
   const nodeY = (len, idx) => canvas.height * (0.1 + 0.8 * (idx + 1) / (len + 1));
 
   const mapIdx = arr => {
