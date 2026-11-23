@@ -1,6 +1,9 @@
 import GLOBAL from './globals.js';
 import { updateSelectedLifeformUI, createNewGeneration, updateLifeformTable, updateStatus, drawWorld } from './index.js';
 import { logToPage } from './utils.js';
+import Occupancy from './occupancy.js';
+
+let occupancy = null; // reused every step
 
 let simulationTimeout = null;
 
@@ -22,11 +25,15 @@ function simulateOneStep() {
   // Evaporate all pheromones before lifeforms act
   updatePheromones();
 
-  // 1. Snapshot of who is where before anyone moves ('y-x' -> lifeform).
-  const occupiedCells = new Map();
-  for (const lf of GLOBAL.lifeform) {
-    if (lf.alive) occupiedCells.set(`${lf.pos_y}-${lf.pos_x}`, lf);
+  // 1. Snapshot of who is where before anyone moves.
+  if (!occupancy || occupancy.width !== GLOBAL.x || occupancy.height !== GLOBAL.y) {
+    occupancy = new Occupancy(GLOBAL.x, GLOBAL.y);
   }
+  occupancy.reset();
+  for (const lf of GLOBAL.lifeform) {
+    if (lf.alive) occupancy.set(lf.pos_x, lf.pos_y, lf);
+  }
+  const occupiedCells = occupancy;
 
   // 2. Main loop: Age, apply energy cost, and act.
   for (const currentLifeform of GLOBAL.lifeform) {

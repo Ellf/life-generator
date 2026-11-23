@@ -6,11 +6,22 @@ import { randomInt, setBit } from './utils.js';
 // Step offsets for each facing: 0 = North, 1 = East, 2 = South, 3 = West.
 const DIR_DX = [0, 1, 0, -1];
 const DIR_DY = [-1, 0, 1, 0];
-const LONG_PROBE_DIST = 16; // how far LONGPROBE_BAR_FWD looks ahead, in cells
+const DEFAULT_LONG_PROBE_DIST = 16; // biosim4: longProbeDistance (SET_LONGPROBE_DIST changes it, 1..33)
+const DEFAULT_OSC_PERIOD = 34;      // biosim4: the oscillator period when SET_OSCILLATOR_PERIOD is undriven
+const POPULATION_RADIUS = 2.5;      // biosim4: populationSensorRadius
+
+// Cells within POPULATION_RADIUS of a lifeform, as [dx, dy] offsets (including itself).
+const NEIGHBOURHOOD = [];
+for (let dy = -2; dy <= 2; dy++) {
+  for (let dx = -2; dx <= 2; dx++) {
+    if (dx * dx + dy * dy <= POPULATION_RADIUS * POPULATION_RADIUS) NEIGHBOURHOOD.push([dx, dy]);
+  }
+}
 
 // biosim4: neurons start (and, if undriven, stay) at 0.5, which gives brains a constant bias.
 const INITIAL_NEURON_OUTPUT = 0.5;
 const EMIT_THRESHOLD = 0.5;
+const KILL_THRESHOLD = 0.5;
 const RESPONSIVENESS_K = 2; // biosim4's responsivenessCurveKFactor
 const ACTION_INDEX = Object.fromEntries(Object.keys(ACTS.Action).map((name, i) => [name, i]));
 
@@ -38,6 +49,12 @@ export default class Life {
     this.old_x = this.pos_x;
     this.old_y = this.pos_y;
     this.direction = randomInt(0, 4);
+    // Last move as (east, north) components, -1/0/1. Starts as the way it faces.
+    this.lastMoveX = DIR_DX[this.direction];
+    this.lastMoveNorth = -DIR_DY[this.direction];
+    this.oscPeriod = DEFAULT_OSC_PERIOD;
+    this.longProbeDist = DEFAULT_LONG_PROBE_DIST;
+    this.path = []; // flat [x0, y0, x1, y1, ...] of where it has been this generation
     this.lastAction = 'None';
     this.actionLog = [];
 
@@ -63,16 +80,19 @@ export default class Life {
   getSensorValues(occupiedCells) {
     const sensorNames = Object.keys(SENS.Sensor);
     const sensorValues = new Array(sensorNames.length).fill(0);
+    // Only work out the senses this brain is wired to; the rest stay 0 and are never read.
+    const used = this._usedSensors;
+    const need = i => i !== -1 && (!used || used.has(i));
 
     // LOC_X: East/West location, normalized between 0.0 and 1.0
     const locXIndex = sensorNames.indexOf('LOC_X');
-    if (locXIndex !== -1) {
+    if (need(locXIndex)) {
       sensorValues[locXIndex] = this.pos_x / GLOBAL.x;
     }
     
     // LOC_Y: NORTH/SOUTH location, normalized between 0.0 and 1.0
     const locYIndex = sensorNames.indexOf('LOC_Y');
-    if (locYIndex !== -1) {
+    if (need(locYIndex)) {
       sensorValues[locYIndex] = this.pos_y / GLOBAL.y;
     }
     
@@ -80,15 +100,15 @@ export default class Life {
     const geneticSimFwd = sensorNames.indexOf('GENETIC_SIM_FWD');
     let geneticSim = 0;
     
-    if (geneticSimFwd !== -1) {
+    if (need(geneticSimFwd)) {
       let fwdX = this.pos_x, fwdY = this.pos_y;
       if (this.direction === 0) fwdY--; // North
       if (this.direction === 1) fwdX++; // East
       if (this.direction === 2) fwdY++; // South
       if (this.direction === 3) fwdX--; // West
       
-      const ahead = occupiedCells && occupiedCells.get(`${fwdY}-${fwdX}`);
-      const forwardLifeform = ahead && ahead !== true && ahead.alive ? ahead : null;
+      const ahead = occupiedCells && occupiedCells.get(fwdX, fwdY);
+      const forwardLifeform = ahead && ahead.alive ? ahead : null;
 
       if (forwardLifeform) {
         const genomeA = this.genome;
@@ -107,19 +127,19 @@ export default class Life {
 
     // AGE: Normalized age. Let's cap max age at 1000 for normalization.
     const ageIndex = sensorNames.indexOf('AGE');
-    if (ageIndex !== -1) {
+    if (need(ageIndex)) {
       sensorValues[ageIndex] = Math.min(this.age / 1000, 1.0);
     }
 
     // RANDOM: A random value, for spontaneous behavior.
     const randomIndex = sensorNames.indexOf('RANDOM');
-    if (randomIndex !== -1) {
+    if (need(randomIndex)) {
       sensorValues[randomIndex] = Math.random();
     }
 
     // BOUNDARY_DIST_X: How close to an East/West wall (0.0 = on edge, 1.0 = center)
     const boundaryXIndex = sensorNames.indexOf('BOUNDARY_DIST_X');
-    if (boundaryXIndex !== -1) {
+    if (need(boundaryXIndex)) {
       // This calculation finds the closest distance to an E/W wall and normalizes it
       const distX = Math.min(this.pos_x, (GLOBAL.x - 1) - this.pos_x);
       sensorValues[boundaryXIndex] = distX / (GLOBAL.x / 2);
@@ -127,28 +147,30 @@ export default class Life {
 
     // BOUNDARY_DIST_Y: How close to a North/South wall
     const boundaryYIndex = sensorNames.indexOf('BOUNDARY_DIST_Y');
-    if (boundaryYIndex !== -1) {
+    if (need(boundaryYIndex)) {
       const distY = Math.min(this.pos_y, (GLOBAL.y - 1) - this.pos_y);
       sensorValues[boundaryYIndex] = distY / (GLOBAL.y / 2);
     }
 
     // BOUNDARY_DIST: How close to the NEAREST wall
     const boundaryDistIndex = sensorNames.indexOf('BOUNDARY_DIST');
-    if (boundaryDistIndex !== -1) {
+    if (need(boundaryDistIndex)) {
       // We can just use the minimum of the two previous calculations
-      sensorValues[boundaryDistIndex] = Math.min(sensorValues[boundaryXIndex], sensorValues[boundaryYIndex]);
+      const distX = Math.min(this.pos_x, (GLOBAL.x - 1) - this.pos_x) / (GLOBAL.x / 2);
+      const distY = Math.min(this.pos_y, (GLOBAL.y - 1) - this.pos_y) / (GLOBAL.y / 2);
+      sensorValues[boundaryDistIndex] = Math.min(distX, distY);
     }
 
     // BARRIER_FWD: 1.0 if the cell straight ahead is a wall or the world edge.
     const dx = DIR_DX[this.direction], dy = DIR_DY[this.direction];
     const barrierFwdIndex = sensorNames.indexOf('BARRIER_FWD');
-    if (barrierFwdIndex !== -1) {
+    if (need(barrierFwdIndex)) {
       sensorValues[barrierFwdIndex] = isBlocked(this.pos_x + dx, this.pos_y + dy) ? 1.0 : 0.0;
     }
 
     // BARRIER_LR: wall to the side (Value = Right - Left: +1 wall on the right, -1 on the left).
     const barrierLRIndex = sensorNames.indexOf('BARRIER_LR');
-    if (barrierLRIndex !== -1) {
+    if (need(barrierLRIndex)) {
       // Right of facing (dx, dy) is (-dy, dx); left is (dy, -dx).
       const right = isBlocked(this.pos_x - dy, this.pos_y + dx) ? 1 : 0;
       const left = isBlocked(this.pos_x + dy, this.pos_y - dx) ? 1 : 0;
@@ -157,32 +179,86 @@ export default class Life {
 
     // LONGPROBE_BAR_FWD: how close the nearest wall ahead is (1.0 = adjacent, 0 = none in range).
     const longProbeBarIndex = sensorNames.indexOf('LONGPROBE_BAR_FWD');
-    if (longProbeBarIndex !== -1) {
+    if (need(longProbeBarIndex)) {
       let value = 0;
-      for (let d = 1; d <= LONG_PROBE_DIST; d++) {
+      for (let d = 1; d <= this.longProbeDist; d++) {
         if (isBlocked(this.pos_x + dx * d, this.pos_y + dy * d)) {
-          value = 1 - (d - 1) / LONG_PROBE_DIST;
+          value = 1 - (d - 1) / this.longProbeDist;
           break;
         }
       }
       sensorValues[longProbeBarIndex] = value;
     }
 
-    // --- Add POPULATION_FWD Sensor ---
-    const popFwdIndex = sensorNames.indexOf('POPULATION_FWD');
-    if (popFwdIndex !== -1) {
-      let fwdX = this.pos_x, fwdY = this.pos_y;
-      if (this.direction === 0) fwdY--; // North
-      if (this.direction === 1) fwdX++; // East
-      if (this.direction === 2) fwdY++; // South
-      if (this.direction === 3) fwdX--; // West
+    // --- Population senses (biosim4's definitions) ---
+    // Facing as a unit vector in (east, north) terms; right of it is (north, -east).
+    const faceX = DIR_DX[this.direction], faceNorth = -DIR_DY[this.direction];
+    const occupant = (x, y) => {
+      const lf = occupiedCells && occupiedCells.get(x, y);
+      return lf && lf.alive ? lf : null;
+    };
 
-      sensorValues[popFwdIndex] = occupiedCells.has(`${fwdY}-${fwdX}`) ? 1.0 : 0.0;
+    // POPULATION: share of nearby cells (radius 2.5) that are occupied, itself included.
+    const popIndex = sensorNames.indexOf('POPULATION');
+    if (need(popIndex)) {
+      let cells = 0, occupied = 0;
+      for (const [dx, dy] of NEIGHBOURHOOD) {
+        const x = this.pos_x + dx, y = this.pos_y + dy;
+        if (x < 0 || x >= GLOBAL.x || y < 0 || y >= GLOBAL.y) continue;
+        cells++;
+        if ((dx === 0 && dy === 0) || occupant(x, y)) occupied++;
+      }
+      sensorValues[popIndex] = cells ? occupied / cells : 0;
+    }
+
+    // POPULATION_FWD / POPULATION_LR: how crowded it is ahead (or to the right) versus behind
+    // (or to the left). 0.5 = even or empty; above 0.5 = more crowded ahead / to the right.
+    const densityAlong = (axisX, axisNorth) => {
+      let sum = 0;
+      for (const [dx, dy] of NEIGHBOURHOOD) {
+        if (dx === 0 && dy === 0) continue;
+        if (!occupant(this.pos_x + dx, this.pos_y + dy)) continue;
+        const east = dx, north = -dy;
+        sum += (axisX * east + axisNorth * north) / (east * east + north * north);
+      }
+      const maxSum = 6 * POPULATION_RADIUS;
+      return (sum / maxSum + 1) / 2;
+    };
+    const popFwdIndex = sensorNames.indexOf('POPULATION_FWD');
+    if (need(popFwdIndex)) sensorValues[popFwdIndex] = densityAlong(faceX, faceNorth);
+    const popLRIndex = sensorNames.indexOf('POPULATION_LR');
+    if (need(popLRIndex)) sensorValues[popLRIndex] = densityAlong(faceNorth, -faceX);
+
+    // LONGPROBE_POP_FWD: distance to the nearest lifeform straight ahead, as a share of how far
+    // it looks (1.0 = none in range). Walls block the view.
+    const longPopIndex = sensorNames.indexOf('LONGPROBE_POP_FWD');
+    if (need(longPopIndex)) {
+      let d = 1;
+      for (; d <= this.longProbeDist; d++) {
+        const x = this.pos_x + DIR_DX[this.direction] * d, y = this.pos_y + DIR_DY[this.direction] * d;
+        if (isBlocked(x, y) || occupant(x, y)) break;
+      }
+      const x = this.pos_x + DIR_DX[this.direction] * d, y = this.pos_y + DIR_DY[this.direction] * d;
+      const found = d <= this.longProbeDist && !isBlocked(x, y);
+      sensorValues[longPopIndex] = found ? (d - 1) / this.longProbeDist : 1.0;
+    }
+
+    // LAST_MOVE_DIR_X / _Y: last move west/none/east (or south/none/north) as 0, 0.5, 1.
+    const lastXIndex = sensorNames.indexOf('LAST_MOVE_DIR_X');
+    if (need(lastXIndex)) sensorValues[lastXIndex] = (this.lastMoveX + 1) / 2;
+    const lastYIndex = sensorNames.indexOf('LAST_MOVE_DIR_Y');
+    if (need(lastYIndex)) sensorValues[lastYIndex] = (this.lastMoveNorth + 1) / 2;
+
+    // OSC1: an internal clock, a wave from 0 to 1 and back every oscPeriod steps.
+    const oscIndex = sensorNames.indexOf('OSC1');
+    if (need(oscIndex)) {
+      const phase = (GLOBAL.yearCounter % this.oscPeriod) / this.oscPeriod;
+      sensorValues[oscIndex] = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
     }
 
     // --- Add a Food Sensor ---
     const foodFwdIndex = sensorNames.indexOf('SIGNAL0_FOOD');
-    if (foodFwdIndex !== -1) {
+    if (need(foodFwdIndex)) {
       
       if (!GLOBAL.foodEnergyEnabled) {
         sensorValues[foodFwdIndex] = 0.0;
@@ -221,7 +297,7 @@ export default class Life {
 
     // SIGNAL1: Pheromone gradient forward (Value = Fwd - Current)
     const signal1Index = sensorNames.indexOf('SIGNAL1');
-    if (signal1Index !== -1) {
+    if (need(signal1Index)) {
       let fwdX = this.pos_x, fwdY = this.pos_y;
       if (this.direction === 0) fwdY--; // North
       if (this.direction === 1) fwdX++; // East
@@ -237,7 +313,7 @@ export default class Life {
 
     // SIGNAL1_LR: Pheromone gradient left/right (Value = Right - Left)
     const signal1LRIndex = sensorNames.indexOf('SIGNAL1_LR');
-    if (signal1LRIndex !== -1) {
+    if (need(signal1LRIndex)) {
       let leftX = this.pos_x, leftY = this.pos_y;
       let rightX = this.pos_x, rightY = this.pos_y;
 
@@ -273,6 +349,7 @@ export default class Life {
       ...this.brain.filter(g => g.sinkType === 0),
       ...this.brain.filter(g => g.sinkType === 1),
     ];
+    this._usedSensors = new Set(this.brain.filter(g => g.sourceType === 0).map(g => g.sourceId));
     this._driven = new Array(GLOBAL.inner_neurons).fill(false);
     for (const g of this.brain) if (g.sinkType === 0) this._driven[g.sinkId] = true;
     this.neurons = new Array(GLOBAL.inner_neurons).fill(INITIAL_NEURON_OUTPUT);
@@ -352,6 +429,29 @@ export default class Life {
       GLOBAL.pheromoneGrid[this.pos_y][this.pos_x] = GLOBAL.pheromoneStrength;
     }
 
+    // SET_OSCILLATOR_PERIOD: higher level = slower clock (period 2..1100 steps; undriven = 34).
+    const oscLevel = squash01(levels[A.SET_OSCILLATOR_PERIOD] || 0);
+    this.oscPeriod = 1 + Math.floor(1.5 + Math.exp(7 * oscLevel));
+
+    // SET_LONGPROBE_DIST: how far the long-range senses look (1..33 cells; undriven = 17).
+    this.longProbeDist = Math.floor(1 + squash01(levels[A.SET_LONGPROBE_DIST] || 0) * 32);
+
+    // KILL_FORWARD: off unless GLOBAL.killEnable (biosim4's killEnable defaults to false too).
+    if (GLOBAL.killEnable) {
+      const killLevel = squash01(levels[A.KILL_FORWARD] || 0) * responsiveness;
+      if (killLevel > KILL_THRESHOLD && Math.random() < killLevel) {
+        const x = this.pos_x + DIR_DX[this.direction], y = this.pos_y + DIR_DY[this.direction];
+        const victim = occupiedCells && occupiedCells.get(x, y);
+        if (victim && victim.alive && victim !== this) {
+          victim.alive = false;
+          victim.color = [200, 50, 50];
+          victim.actionLog.push(`Killed by #${this.id} at (${x},${y})`);
+          this.actionLog.push(`Killed #${victim.id} at (${x},${y})`);
+          occupiedCells.clear(x, y);
+        }
+      }
+    }
+
     // --- Movement: sum every urge into X (east +) and Y (north +), as biosim4 does ---
     const fwdX = DIR_DX[this.direction], fwdNorth = -DIR_DY[this.direction];
     // Right of facing (east, north) is (north, -east); left is the opposite.
@@ -408,7 +508,7 @@ export default class Life {
     }
     
     // 2. Check for other lifeform
-    if (occupiedCells && occupiedCells.has(`${newY}-${newX}`)) {
+    if (occupiedCells && occupiedCells.get(newX, newY)) {
       // cell blocked by another lifeform
       this.actionLog.push("Blocked by lifeform at (" + newX + "," + newY + ")");
       if (this.actionLog.length > 100) this.actionLog.shift();
@@ -426,10 +526,14 @@ export default class Life {
     this.pos_x = newX;
     this.pos_y = newY;
 
+    this.lastMoveX = Math.sign(dx);
+    this.lastMoveNorth = -Math.sign(dy);
+    this.path.push(newX, newY);
+
     // 5. Keep this tick's occupancy map current, so two lifeforms can't step onto the same cell.
     if (occupiedCells) {
-      occupiedCells.delete(`${this.old_y}-${this.old_x}`);
-      occupiedCells.set(`${newY}-${newX}`, this);
+      occupiedCells.clear(this.old_x, this.old_y);
+      occupiedCells.set(newX, newY, this);
     }
 
     // 6. Check for death after the move.

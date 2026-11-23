@@ -14,6 +14,7 @@ export default {
   mutation_rate: 0.001,      // biosim4: pointMutationRate (per gene)
   sexualReproduction: true,  // biosim4: children mix two parents' genes
   chooseParentsByFitness: true,
+  killEnable: false,         // biosim4: lets KILL_FORWARD kill the lifeform ahead (off, as in biosim4)
   fastForward: false,        // run many steps per frame and redraw less
   sensory_inputs: 10,
   inner_neurons: 5,          // biosim4: maxNumberNeurons

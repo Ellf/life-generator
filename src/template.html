@@ -15,7 +15,7 @@
         <div class="world-container">
             <canvas class="world" title="Click a lifeform to inspect it"></canvas>
         </div>
-        <p class="hint">Click a lifeform to inspect it. Grey = wall, blue area = goal, orange ring = selected, green dots = food, red ✕ = died.</p>
+        <p class="hint">Click a lifeform to inspect it. Grey = wall, blue area = goal, orange ring and line = selected lifeform and its path, green dots = food, red ✕ = died.</p>
         <div class="primary-controls">
             <div class="stats-card">
                 <h3>Simulation</h3>
@@ -91,6 +91,9 @@
             </div>
             <div class="brain-card">
                 <h3>Brain</h3>
+                <h4 class="subhead">What it does, in plain English</h4>
+                <ul id="brain-english" class="brain-english"></ul>
+                <h4 class="subhead">Wiring</h4>
                 <p class="legend">
                     <span class="dot sensor"></span> Sensor
                     <span class="dot neuron"></span> Neuron
