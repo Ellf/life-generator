@@ -17,22 +17,16 @@ function updatePheromones() {
   }
 }
 
-function runStep() {
-  simulationTimeout = null;
-  if (GLOBAL.yearCounter >= GLOBAL.targetYear || GLOBAL.isPaused) {
-    return;
-  }
-
+/** Advance the world by one step. Returns true when the generation is over. */
+function simulateOneStep() {
   // Evaporate all pheromones before lifeforms act
   updatePheromones();
 
-  // 1. Create the "snapshot" of the world before anyone moves.
+  // 1. Snapshot of who is where before anyone moves ('y-x' -> lifeform).
   const occupiedCells = new Map();
-  GLOBAL.lifeform.forEach(lf => {
-    if (lf.alive) {
-      occupiedCells.set(`${lf.pos_y}-${lf.pos_x}`, true);
-    }
-  });
+  for (const lf of GLOBAL.lifeform) {
+    if (lf.alive) occupiedCells.set(`${lf.pos_y}-${lf.pos_x}`, lf);
+  }
 
   // 2. Main loop: Age, apply energy cost, and act.
   for (const currentLifeform of GLOBAL.lifeform) {
@@ -49,28 +43,46 @@ function runStep() {
       continue;
     }
 
-    // Let the brain decide and perform the action
-    const chosenAction = currentLifeform.processBrain(occupiedCells);
-    currentLifeform.performAction(chosenAction, occupiedCells);
+    // Let the brain decide and act
+    const actionLevels = currentLifeform.processBrain(occupiedCells);
+    currentLifeform.executeActions(actionLevels, occupiedCells);
   }
 
-  // 3. Update UI
   GLOBAL.yearCounter += 1;
+
+  // The generation ends when its time is up, or straight away if everyone has died.
+  return !GLOBAL.lifeform.some(lf => lf.alive) || GLOBAL.yearCounter % GLOBAL.generationLength === 0;
+}
+
+// In fast-forward, keep stepping for this long before redrawing once.
+const FAST_FORWARD_BUDGET_MS = 50;
+
+function runStep() {
+  simulationTimeout = null;
+  if (GLOBAL.yearCounter >= GLOBAL.targetYear || GLOBAL.isPaused) {
+    return;
+  }
+
+  const deadline = performance.now() + FAST_FORWARD_BUDGET_MS;
+  let generationOver;
+  do {
+    generationOver = simulateOneStep();
+  } while (GLOBAL.fastForward && !generationOver && performance.now() < deadline);
+
+  // Update the UI once per batch of steps
   updateStatus();
   updateSelectedLifeformUI();
   updateLifeformTable();
   drawWorld();
 
-  // 4. End the generation when its time is up, or straight away if everyone has died.
-  const anyAlive = GLOBAL.lifeform.some(lf => lf.alive);
-  if (!anyAlive || GLOBAL.yearCounter % GLOBAL.generationLength === 0) {
+  if (generationOver) {
     logToPage(`--- End of Generation ${GLOBAL.generation} (year ${GLOBAL.yearCounter}) ---`);
     createNewGeneration(); // This function will restart the simulation
     return;
   }
 
-  // 5. Schedule the NEXT step
-  simulationTimeout = setTimeout(runStep, GLOBAL.simulationSpeed);
+  // Schedule the next step (or batch)
+  simulationTimeout = setTimeout(runStep, GLOBAL.fastForward ? 0 : GLOBAL.simulationSpeed);
 }
 
 function startSimulation(steps) {

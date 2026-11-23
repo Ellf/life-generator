@@ -3,7 +3,8 @@ import GLOBAL from './globals.js';
 import { startSimulation, stopSimulation } from './simulator.js';
 import SENS from './sensor.js';
 import ACTS from './action.js';
-import { logToPage, randomInt, mutateGeneBit } from './utils.js';
+import { logToPage, randomInt } from './utils.js';
+import { makeChildGenome, shuffle } from './genetics.js';
 import Life, { parseGene, isBlocked } from './life.js';
 import { CHALLENGES, applyChallenge, inZone, qualifies } from './challenges.js';
 
@@ -18,6 +19,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   worldCanvas.addEventListener('click', onWorldCanvasClick);
 
   // The slider runs 1 (slow) to 200 (fast); invert it into a delay in ms.
+  const fastForward = document.getElementById('fast-forward');
+  fastForward.checked = GLOBAL.fastForward;
+  fastForward.addEventListener('change', () => { GLOBAL.fastForward = fastForward.checked; });
+
   const speedSlider = document.getElementById('speed-slider');
   const applySpeed = () => { GLOBAL.simulationSpeed = 201 - Number(speedSlider.value); };
   applySpeed();
@@ -564,8 +569,8 @@ export async function createNewGeneration() {
   stopSimulation();
 
   // 1. SELECTION: lifeforms that met the challenge (alive, and in the goal zone if there is one),
-  // fittest (highest energy) first.
-  const parents = GLOBAL.lifeform.filter(qualifies).sort((a, b) => b.energy - a.energy);
+  // fittest (highest energy) first. Shuffling first means ties don't always favour the same ids.
+  const parents = shuffle(GLOBAL.lifeform.filter(qualifies)).sort((a, b) => b.energy - a.energy);
   const total = GLOBAL.lifeform.length;
   const percent = total ? Math.round((parents.length / total) * 100) : 0;
   GLOBAL.history.push({ generation: GLOBAL.generation, percent });
@@ -585,15 +590,12 @@ export async function createNewGeneration() {
     newLifeforms = randomPopulation(GLOBAL.generation);
   } else {
     setStatusMessage(''); // a generation succeeded, so any old notice is stale
-    // 2. REPRODUCTION: fitter parents are earlier in the list, so they may parent more than once.
+    // 2. REPRODUCTION and 3. MUTATION, as biosim4 does it: each child mixes two parents
+    // (fitter ones picked more often), then may get a few random bit flips.
+    const parentGenomes = parents.map(p => p.genome);
     newLifeforms = [];
     for (let i = 0; i < GLOBAL.startingLife; i++) {
-      const parent = parents[i % parents.length];
-      // 3. MUTATION: flip a bit in each gene with probability mutation_rate
-      const newGenome = parent.genome.map(gene =>
-        Math.random() < GLOBAL.mutation_rate ? mutateGeneBit(gene) : gene
-      );
-      newLifeforms.push(new Life(i, GLOBAL.generation, newGenome));
+      newLifeforms.push(new Life(i, GLOBAL.generation, makeChildGenome(parentGenomes)));
     }
   }
 

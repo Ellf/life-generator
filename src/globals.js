@@ -5,15 +5,18 @@ export default {
   w: 4,
   x: 128,
   y: 128,
-  startingLife: 100,
+  startingLife: 300,
   selectedLifeformId: null,
-  generationLength: 160,
+  generationLength: 300,     // biosim4: stepsPerGeneration
   generation: 0,
   lifeform: [],
-  gen_len: 4,
-  mutation_rate: 0.01,
+  gen_len: 24,               // biosim4: genomeInitialLength
+  mutation_rate: 0.001,      // biosim4: pointMutationRate (per gene)
+  sexualReproduction: true,  // biosim4: children mix two parents' genes
+  chooseParentsByFitness: true,
+  fastForward: false,        // run many steps per frame and redraw less
   sensory_inputs: 10,
-  inner_neurons: 2,
+  inner_neurons: 5,          // biosim4: maxNumberNeurons
   action_outputs: 10,
   yearCounter: 0,
   targetYear: 0,
