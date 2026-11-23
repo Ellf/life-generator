@@ -17,10 +17,16 @@ const setBit = (n, bitIndex) => {
     return n | bitMask;
 }
 
+const MAX_LOG_LINES = 300;
+
 function logToPage(message) {
   const logOutput = document.getElementById('log-output');
   if (logOutput) {
-    logOutput.insertAdjacentHTML('beforeend', `<p>> ${message}</p>`);
+    const line = document.createElement('p');
+    line.textContent = `> ${message}`;
+    logOutput.appendChild(line);
+    // Keep the log to a sensible length so it doesn't grow forever.
+    while (logOutput.childElementCount > MAX_LOG_LINES) logOutput.firstElementChild.remove();
     // Auto-scroll to the bottom
     logOutput.scrollTop = logOutput.scrollHeight;
   }
