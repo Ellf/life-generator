@@ -300,6 +300,7 @@ select {
 }
 
 .brain-english li { margin-bottom: 4px; }
+.brain-english .wire { color: #8a93a6; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1rem; }
 
 .strength {
   display: inline-block;

@@ -22,11 +22,15 @@ export default {
   yearCounter: 0,
   targetYear: 0,
   isPaused: false,
-  initialEnergy: 150,
-  moveCost: 1,
-  foodCount: 40,
-  foodEnergy: 100,
-  foodGrid: [],
+  // Energy (only when food is on). A straight walk to the goal is about 100 moves, so the
+  // starting energy covers that plus a generation of living, with little to spare:
+  // wanderers run out unless they find food on the way.
+  initialEnergy: 200,
+  livingCost: 0.25,          // per step, moving or not (75 over a 300-step generation)
+  moveCost: 1,               // per cell actually moved
+  foodCount: 80,
+  foodEnergy: 50,
+  foodGrid: [],              // food pellets as { x, y }
   foodEnergyEnabled: false, // off by default: the default challenge is about reaching the goal
   challenge: 'gap',          // key into CHALLENGES (challenges.js)
   barrierGrid: [],           // Uint8Array, 1 = wall, indexed y * x + x

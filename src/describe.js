@@ -54,6 +54,29 @@ const ACTION = {
     'attack the lifeform ahead', 'hold back from attacking'],
 };
 
+/**
+ * The brain's connections with repeats merged: two genes linking the same pair act
+ * exactly like one connection whose weight is their sum (both are added in every step).
+ */
+export function mergedConnections(brain) {
+  const byPair = new Map();
+  for (const g of brain || []) {
+    const key = `${g.sourceType}:${g.sourceId}>${g.sinkType}:${g.sinkId}`;
+    const seen = byPair.get(key);
+    if (seen) seen.weight += g.weight;
+    else byPair.set(key, { ...g });
+  }
+  return [...byPair.values()];
+}
+
+/** Short wiring label, e.g. "N1 → MOVE_SOUTH, −3.84", so a sentence can be found in the diagram. */
+function wiring(gene, sensorNames, actionNames) {
+  const from = gene.sourceType === 0 ? sensorNames[gene.sourceId] : `N${gene.sourceId}`;
+  const to = gene.sinkType === 1 ? actionNames[gene.sinkId] : `N${gene.sinkId}`;
+  const w = gene.weight.toFixed(2).replace('-', '−');
+  return `${from} → ${to}, ${gene.weight >= 0 ? '+' : ''}${w}`;
+}
+
 function strength(weight) {
   const w = Math.abs(weight);
   return w >= 2.5 ? 'strong' : w >= 1 ? 'medium' : 'weak';
@@ -80,8 +103,8 @@ function sentence(gene, driven, sensorNames) {
   const n = gene.sourceId;
   if (gene.sinkType === 0 && gene.sinkId === n) {
     return gene.weight >= 0
-      ? `Neuron N${n} feeds back into itself, so it holds on to what it was doing (a simple memory).`
-      : `Neuron N${n} damps itself, so it flips back and forth.`;
+      ? `Neuron N${n} feeds back into itself, so it tends to keep its last value (a simple memory).`
+      : `Neuron N${n} feeds back against itself, so it tends to flip back and forth.`;
   }
   if (!driven.has(n)) {
     // A neuron with no inputs holds a steady 0.5, so it acts as a constant push.
@@ -91,20 +114,36 @@ function sentence(gene, driven, sensorNames) {
 }
 
 /**
- * Sentences for a lifeform's brain, strongest first: [{ text, strength }].
- * Left out: connections into a neuron that feeds nothing, and attack connections
- * while attacking is switched off, since neither can affect what it does.
+ * Sentences for a lifeform's brain, strongest first: [{ text, wiring, strength }].
+ * Repeated connections are merged first. Left out: connections into a neuron whose output
+ * never reaches an action, and attack connections while attacking is switched off, since neither can
+ * affect what it does.
  */
 export function describeBrain(lifeform) {
-  const brain = lifeform.brain || [];
+  const brain = mergedConnections(lifeform.brain);
   const sensorNames = Object.keys(SENS.Sensor);
+  const actionNames = Object.keys(ACTS.Action);
   const killIndex = Object.keys(ACTS.Action).indexOf('KILL_FORWARD');
-  const feedsSomething = new Set(brain.filter(g => g.sourceType === 1).map(g => g.sourceId));
+  // Neurons whose output reaches an action, directly or through other neurons.
+  const feedsSomething = new Set(brain.filter(g => g.sourceType === 1 && g.sinkType === 1).map(g => g.sourceId));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const g of brain) {
+      if (g.sourceType === 1 && g.sinkType === 0 && feedsSomething.has(g.sinkId) && !feedsSomething.has(g.sourceId)) {
+        feedsSomething.add(g.sourceId);
+        grew = true;
+      }
+    }
+  }
   const driven = new Set(brain.filter(g => g.sinkType === 0).map(g => g.sinkId));
 
   return brain
     .filter(g => (g.sinkType === 1 ? GLOBAL.killEnable || g.sinkId !== killIndex : feedsSomething.has(g.sinkId)))
     .slice()
     .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-    .map(gene => ({ text: sentence(gene, driven, sensorNames), strength: strength(gene.weight) }));
+    .map(gene => ({
+      text: sentence(gene, driven, sensorNames),
+      wiring: wiring(gene, sensorNames, actionNames),
+      strength: strength(gene.weight),
+    }));
 }

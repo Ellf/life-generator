@@ -5,7 +5,7 @@ import SENS from './sensor.js';
 import ACTS from './action.js';
 import { logToPage, randomInt } from './utils.js';
 import { makeChildGenome, shuffle } from './genetics.js';
-import { describeBrain } from './describe.js';
+import { describeBrain, mergedConnections } from './describe.js';
 import Life, { parseGene, isBlocked } from './life.js';
 import { CHALLENGES, applyChallenge, inZone, qualifies, distanceToGoal } from './challenges.js';
 
@@ -177,7 +177,7 @@ export function updateSelectedLifeformUI() {
 
   set('#cell-selected span', `#${id} (gen ${lifeform.generation})`);
   set('#position span', `${lifeform.pos_x}, ${lifeform.pos_y} facing ${DIRECTIONS[lifeform.direction]}`);
-  set('#energy span', lifeform.alive ? (GLOBAL.foodEnergyEnabled ? lifeform.energy : 'n/a') : 'Dead');
+  set('#energy span', lifeform.alive ? (GLOBAL.foodEnergyEnabled ? Math.round(lifeform.energy) : 'n/a') : 'Dead');
   set('#age span', lifeform.age);
   set('#last-action span', lifeform.lastAction || '-');
   set('#genome-raw-output', lifeform.genome ? lifeform.genome.join(' ') : '-');
@@ -204,12 +204,15 @@ function renderBrainEnglish(lifeform) {
   if (englishFor === lifeform.brain) return;
   englishFor = lifeform.brain;
   const sentences = describeBrain(lifeform);
-  list.replaceChildren(...sentences.slice(0, MAX_SENTENCES).map(({ text, strength }) => {
+  list.replaceChildren(...sentences.slice(0, MAX_SENTENCES).map(({ text, wiring, strength }) => {
     const li = document.createElement('li');
     const tag = document.createElement('span');
     tag.className = `strength ${strength}`;
     tag.textContent = strength;
-    li.append(text, tag);
+    const wire = document.createElement('span');
+    wire.className = 'wire';
+    wire.textContent = `(${wiring})`;
+    li.append(text, ' ', wire, tag);
     return li;
   }));
   if (sentences.length > MAX_SENTENCES) {
@@ -249,67 +252,94 @@ function clearBrainCanvas() {
 function drawBrainCanvas(lifeform) {
   const canvas = document.getElementById('brain-canvas');
   if (!canvas || !lifeform || !lifeform.brain) return;
+  // Repeated genes linking the same pair are drawn as one line with their summed weight.
+  const connections = mergedConnections(lifeform.brain);
+
+  // 1. Every sense, neuron and action the brain uses, in index order.
+  const used = (filter, pick) => [...new Set(connections.filter(filter).map(pick))].sort((a, b) => a - b);
+  const sensors = used(g => g.sourceType === 0, g => g.sourceId);
+  const neurons = [...new Set([...used(g => g.sourceType === 1, g => g.sourceId), ...used(g => g.sinkType === 0, g => g.sinkId)])].sort((a, b) => a - b);
+  const actions = used(g => g.sinkType === 1, g => g.sinkId);
+
+  // 2. Grow the canvas so every node fits (it scrolls inside .brain-scroll).
+  const ROW = 44;
+  const height = Math.max(500, (Math.max(sensors.length, neurons.length, actions.length) + 1) * ROW);
+  if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 1. Find used sensors/neurons/actions from genes
-  const usedSensors = new Set();
-  const usedNeurons = new Set();
-  const usedActions = new Set();
-
-  for (const gene of lifeform.brain) {
-    if (gene.sourceType === 0) usedSensors.add(gene.sourceId);
-    if (gene.sourceType === 1) usedNeurons.add(gene.sourceId);
-    if (gene.sinkType === 0) usedNeurons.add(gene.sinkId);
-    if (gene.sinkType === 1) usedActions.add(gene.sinkId);
-  }
-  // Sorted for layout stability, and capped for clarity.
-  const MAX_SHOWN = 8;
-  const sortedSlice = set => Array.from(set).sort((a, b) => a - b).slice(0, MAX_SHOWN);
-  const sensorsToDraw = sortedSlice(usedSensors);
-  const neuronsToDraw = sortedSlice(usedNeurons);
-  const actionsToDraw = sortedSlice(usedActions);
-
-  // 2. Node positions per column. Side columns leave room for 16px labels.
   const nodeR = 16;
-  const nodeX = [canvas.width * 0.35, canvas.width * 0.5, canvas.width * 0.65];
-  const nodeY = (len, idx) => canvas.height * (0.1 + 0.8 * (idx + 1) / (len + 1));
+  const colX = [canvas.width * 0.32, canvas.width * 0.5, canvas.width * 0.68];
+  const rowY = (count, i) => canvas.height * (i + 1) / (count + 1);
+  const pos = {};
+  sensors.forEach((id, i) => { pos[`s${id}`] = [colX[0], rowY(sensors.length, i)]; });
+  neurons.forEach((id, i) => { pos[`n${id}`] = [colX[1], rowY(neurons.length, i)]; });
+  actions.forEach((id, i) => { pos[`a${id}`] = [colX[2], rowY(actions.length, i)]; });
+  const neuronYs = neurons.map((_, i) => rowY(neurons.length, i));
 
-  const mapIdx = arr => {
-    const result = {};
-    arr.forEach((val, i) => { result[val] = i; });
-    return result;
+  // A sense wired straight to an action would cross the neuron column, and could look
+  // as if it ran through a neuron. Bend it through the nearest gap between neurons instead.
+  const gapNear = y => {
+    if (!neuronYs.length) return y;
+    const gaps = [neuronYs[0] - ROW / 2, ...neuronYs.slice(1).map((ny, i) => (ny + neuronYs[i]) / 2), neuronYs[neuronYs.length - 1] + ROW / 2];
+    return gaps.reduce((best, g) => (Math.abs(g - y) < Math.abs(best - y) ? g : best));
   };
-  const sensorMap = mapIdx(sensorsToDraw);
-  const neuronMap = mapIdx(neuronsToDraw);
-  const actionMap = mapIdx(actionsToDraw);
-  const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
-  // Draw connections first
-  ctx.globalAlpha = 0.8;
-  for (const gene of lifeform.brain) {
-    let from = null, to = null;
-    if (gene.sourceType === 0 && has(sensorMap, gene.sourceId)) {
-      from = [nodeX[0], nodeY(sensorsToDraw.length, sensorMap[gene.sourceId])];
-    } else if (gene.sourceType === 1 && has(neuronMap, gene.sourceId)) {
-      from = [nodeX[1], nodeY(neuronsToDraw.length, neuronMap[gene.sourceId])];
+  // Each connection as a quadratic curve [start, control, end], drawn with an arrowhead.
+  const curveFor = gene => {
+    const from = pos[gene.sourceType === 0 ? `s${gene.sourceId}` : `n${gene.sourceId}`];
+    const to = pos[gene.sinkType === 1 ? `a${gene.sinkId}` : `n${gene.sinkId}`];
+    if (gene.sourceType === 0 && gene.sinkType === 1) {
+      const via = [colX[1], gapNear((from[1] + to[1]) / 2)];
+      // A control point of 2·via − midpoint makes the curve pass through via.
+      return [from, [2 * via[0] - (from[0] + to[0]) / 2, 2 * via[1] - (from[1] + to[1]) / 2], to];
     }
-    if (gene.sinkType === 0 && has(neuronMap, gene.sinkId)) {
-      to = [nodeX[1], nodeY(neuronsToDraw.length, neuronMap[gene.sinkId])];
-    } else if (gene.sinkType === 1 && has(actionMap, gene.sinkId)) {
-      to = [nodeX[2], nodeY(actionsToDraw.length, actionMap[gene.sinkId])];
+    if (gene.sourceType === 1 && gene.sinkType === 0) {
+      // Neuron to neuron: bow out to the left of the column, further for longer links, so it
+      // never runs through the neurons in between.
+      const bow = 30 + Math.abs(from[1] - to[1]) * 0.35;
+      return [from, [colX[1] - bow, (from[1] + to[1]) / 2], to];
     }
-    if (!from || !to) continue;
-    ctx.strokeStyle = gene.weight >= 0 ? '#F9ED31' : '#F24367';
-    ctx.lineWidth = Math.max(1, Math.abs(gene.weight) * 2);
+    return [from, [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2], to];
+  };
+
+  const arrowHead = (tip, dirX, dirY, colour) => {
+    const len = Math.hypot(dirX, dirY) || 1;
+    const ux = dirX / len, uy = dirY / len;
+    const bx = tip[0] - ux * nodeR, by = tip[1] - uy * nodeR; // stop at the node's edge
+    ctx.fillStyle = colour;
     ctx.beginPath();
-    ctx.moveTo(from[0], from[1]);
-    ctx.lineTo(to[0], to[1]);
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx - ux * 11 - uy * 6, by - uy * 11 + ux * 6);
+    ctx.lineTo(bx - ux * 11 + uy * 6, by - uy * 11 - ux * 6);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // 3. Connections first, weakest first so strong ones sit on top.
+  ctx.globalAlpha = 0.85;
+  for (const gene of connections.slice().sort((a, b) => Math.abs(a.weight) - Math.abs(b.weight))) {
+    const colour = gene.weight >= 0 ? '#F9ED31' : '#F24367';
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = Math.max(1, Math.abs(gene.weight) * 1.5);
+    if (gene.sourceType === 1 && gene.sinkType === 0 && gene.sourceId === gene.sinkId) {
+      // A neuron feeding itself: a small loop on its right-hand side.
+      const [x, y] = pos[`n${gene.sourceId}`];
+      ctx.beginPath();
+      ctx.arc(x + nodeR + 8, y - 8, 11, 0, 2 * Math.PI);
+      ctx.stroke();
+      continue;
+    }
+    const [a, c, b] = curveFor(gene);
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.quadraticCurveTo(c[0], c[1], b[0], b[1]);
     ctx.stroke();
+    arrowHead(b, b[0] - c[0], b[1] - c[1], colour);
   }
   ctx.globalAlpha = 1.0;
 
-  const drawNode = (x, y, fill) => {
+  const drawNode = ([x, y], fill) => {
     ctx.beginPath();
     ctx.arc(x, y, nodeR, 0, 2 * Math.PI);
     ctx.fillStyle = fill;
@@ -320,35 +350,32 @@ function drawBrainCanvas(lifeform) {
   };
   ctx.font = 'bold 16px Segoe UI, Arial, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#fff';
 
   const sensorKeys = Object.keys(SENS.Sensor);
-  sensorsToDraw.forEach((id, i) => {
-    const y = nodeY(sensorsToDraw.length, i);
-    drawNode(nodeX[0], y, '#24cb72');
+  for (const id of sensors) {
+    const p = pos[`s${id}`];
+    drawNode(p, '#24cb72');
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'right';
-    ctx.fillText(sensorKeys[id], nodeX[0] - nodeR - 8, y);
-  });
-
-  neuronsToDraw.forEach((id, i) => {
+    ctx.fillText(sensorKeys[id], p[0] - nodeR - 8, p[1]);
+  }
+  for (const id of neurons) {
+    const p = pos[`n${id}`];
     const nv = (lifeform._lastNeuronValues && typeof lifeform._lastNeuronValues[id] === 'number')
       ? lifeform._lastNeuronValues[id] : 0;
-    const y = nodeY(neuronsToDraw.length, i);
-    drawNode(nodeX[1], y, nv > 0 ? 'rgb(255,235,70)' : 'rgb(100,120,190)');
+    drawNode(p, nv > 0 ? 'rgb(255,235,70)' : 'rgb(100,120,190)');
     ctx.fillStyle = nv > 0 ? '#222' : '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText('N' + id, nodeX[1], y);
-  });
-
+    ctx.fillText('N' + id, p[0], p[1]);
+  }
   const actionKeys = Object.keys(ACTS.Action);
-  actionsToDraw.forEach((id, i) => {
-    const y = nodeY(actionsToDraw.length, i);
-    drawNode(nodeX[2], y, '#299de0');
+  for (const id of actions) {
+    const p = pos[`a${id}`];
+    drawNode(p, '#299de0');
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(actionKeys[id], nodeX[2] + nodeR + 8, y);
-  });
+    ctx.fillText(actionKeys[id], p[0] + nodeR + 8, p[1]);
+  }
 }
 
 async function setupWorld(isNewGeneration = false) {
@@ -487,10 +514,9 @@ function drawWorld() {
   // Food
   if (GLOBAL.foodEnergyEnabled) {
     worldCtx.fillStyle = '#2ecc71';
-    for (const pos of GLOBAL.foodGrid) {
-      const [fy, fx] = pos.split('-').map(Number);
+    for (const food of GLOBAL.foodGrid) {
       worldCtx.beginPath();
-      worldCtx.arc(cx(fx), cy(fy), Math.max(2, w / 2), 0, 2 * Math.PI);
+      worldCtx.arc(cx(food.x), cy(food.y), Math.max(2, w / 2), 0, 2 * Math.PI);
       worldCtx.fill();
     }
   }
@@ -560,8 +586,7 @@ function spawnFood() {
   if (!GLOBAL.foodEnergyEnabled) return;
   while (GLOBAL.foodGrid.length < GLOBAL.foodCount) {
     const x = randomInt(0, GLOBAL.x), y = randomInt(0, GLOBAL.y);
-    const pos = `${y}-${x}`; // 'y-x'
-    if (!isBlocked(x, y) && !GLOBAL.foodGrid.includes(pos)) GLOBAL.foodGrid.push(pos);
+    if (!isBlocked(x, y) && !GLOBAL.foodGrid.some(f => f.x === x && f.y === y)) GLOBAL.foodGrid.push({ x, y });
   }
 }
 
@@ -594,7 +619,7 @@ export function updateLifeformTable() {
     row.querySelector('.gen').textContent = lifeform.generation;
     row.querySelector('.status').textContent = lifeform.alive ? 'Alive' : 'Dead';
     row.querySelector('.position').textContent = `${lifeform.pos_x}, ${lifeform.pos_y}`;
-    row.querySelector('.energy').textContent = GLOBAL.foodEnergyEnabled ? lifeform.energy : 'n/a';
+    row.querySelector('.energy').textContent = GLOBAL.foodEnergyEnabled ? Math.round(lifeform.energy) : 'n/a';
     row.querySelector('.age').textContent = lifeform.age;
     row.querySelector('.direction').textContent = DIRECTIONS[lifeform.direction];
     row.querySelector('.action').textContent = lifeform.lastAction || '-';

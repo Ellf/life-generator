@@ -41,7 +41,7 @@ function simulateOneStep() {
 
     // Apply cost of living and age up
     currentLifeform.age++;
-    if (GLOBAL.foodEnergyEnabled) currentLifeform.energy -= 1;
+    if (GLOBAL.foodEnergyEnabled) currentLifeform.energy -= GLOBAL.livingCost;
     // Only kill by energy if enabled
     if (GLOBAL.foodEnergyEnabled && currentLifeform.energy <= 0) {
       currentLifeform.alive = false;

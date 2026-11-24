@@ -267,10 +267,9 @@ export default class Life {
         let foodInSight = 0.0;
         
         // Find the closest food source
-        for (const foodPos of GLOBAL.foodGrid) {
-          const [foodY, foodX] = foodPos.split('-').map(Number);
-          const distX = foodX - this.pos_x;
-          const distY = foodY - this.pos_y;
+        for (const food of GLOBAL.foodGrid) {
+          const distX = food.x - this.pos_x;
+          const distY = food.y - this.pos_y;
           const distance = Math.sqrt(distX * distX + distY * distY);
           
           if (distance < closestFoodDist) {
@@ -552,10 +551,7 @@ export default class Life {
 
   checkForFood() {
     if (!GLOBAL.foodEnergyEnabled) return;
-    // foodGrid stores positions as "y-x" (see spawnFood and drawWorld), so the
-    // lookup has to use the same order.
-    const currentPos = `${this.pos_y}-${this.pos_x}`;
-    const foodIndex = GLOBAL.foodGrid.indexOf(currentPos);
+    const foodIndex = GLOBAL.foodGrid.findIndex(f => f.x === this.pos_x && f.y === this.pos_y);
 
     if (foodIndex > -1) {
       this.energy += GLOBAL.foodEnergy;
