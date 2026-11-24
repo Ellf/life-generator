@@ -287,6 +287,32 @@ select {
   overflow-x: auto;
 }
 
+.subhead {
+  margin: 0 0 8px 0;
+  font-size: 1.05rem;
+  color: var(--text-strong-color);
+}
+
+.brain-english {
+  margin: 0 0 16px 0;
+  padding-left: 22px;
+  line-height: 1.5;
+}
+
+.brain-english li { margin-bottom: 4px; }
+
+.strength {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 1rem;
+  color: #1a1a1a;
+}
+.strength.strong { background: #f9a825; }
+.strength.medium { background: #c0c0c0; }
+.strength.weak { background: #6e6e6e; color: #fff; }
+
 .legend {
   display: flex;
   flex-wrap: wrap;

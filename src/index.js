@@ -5,6 +5,7 @@ import SENS from './sensor.js';
 import ACTS from './action.js';
 import { logToPage, randomInt } from './utils.js';
 import { makeChildGenome, shuffle } from './genetics.js';
+import { describeBrain } from './describe.js';
 import Life, { parseGene, isBlocked } from './life.js';
 import { CHALLENGES, applyChallenge, inZone, qualifies, distanceToGoal } from './challenges.js';
 
@@ -169,6 +170,7 @@ export function updateSelectedLifeformUI() {
     set('#genome-raw-output', '-');
     logDiv.innerHTML = '<em>Click a lifeform to see its events.</em>';
     debugTableDiv.innerHTML = '';
+    renderBrainEnglish(null);
     clearBrainCanvas();
     return;
   }
@@ -179,6 +181,7 @@ export function updateSelectedLifeformUI() {
   set('#age span', lifeform.age);
   set('#last-action span', lifeform.lastAction || '-');
   set('#genome-raw-output', lifeform.genome ? lifeform.genome.join(' ') : '-');
+  renderBrainEnglish(lifeform);
 
   logDiv.innerHTML = lifeform.actionLog.length
     ? lifeform.actionLog.slice(-30).reverse().map(e => `<div>${e}</div>`).join('')
@@ -190,6 +193,31 @@ export function updateSelectedLifeformUI() {
   }
 
   drawBrainCanvas(lifeform);
+}
+
+// The plain-English list only changes when a different brain is shown, so build it once per brain.
+const MAX_SENTENCES = 8;
+let englishFor = null;
+function renderBrainEnglish(lifeform) {
+  const list = document.getElementById('brain-english');
+  if (!lifeform) { list.innerHTML = ''; englishFor = null; return; }
+  if (englishFor === lifeform.brain) return;
+  englishFor = lifeform.brain;
+  const sentences = describeBrain(lifeform);
+  list.replaceChildren(...sentences.slice(0, MAX_SENTENCES).map(({ text, strength }) => {
+    const li = document.createElement('li');
+    const tag = document.createElement('span');
+    tag.className = `strength ${strength}`;
+    tag.textContent = strength;
+    li.append(text, tag);
+    return li;
+  }));
+  if (sentences.length > MAX_SENTENCES) {
+    const li = document.createElement('li');
+    li.textContent = `…and ${sentences.length - MAX_SENTENCES} weaker connections.`;
+    list.append(li);
+  }
+  if (!sentences.length) list.innerHTML = '<li>Nothing: none of its connections reach an action.</li>';
 }
 
 function renderBrainDebugTable(lifeform) {
@@ -489,8 +517,17 @@ function drawWorld() {
     }
   }
 
-  // Selection ring, drawn last so it sits on top.
+  // Selection ring and its path this generation, drawn last so they sit on top.
   const selected = GLOBAL.lifeform[GLOBAL.selectedLifeformId];
+  if (selected && selected.path && selected.path.length > 2) {
+    worldCtx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
+    worldCtx.lineWidth = 2;
+    worldCtx.lineJoin = 'round';
+    worldCtx.beginPath();
+    worldCtx.moveTo(cx(selected.path[0]), cy(selected.path[1]));
+    for (let i = 2; i < selected.path.length; i += 2) worldCtx.lineTo(cx(selected.path[i]), cy(selected.path[i + 1]));
+    worldCtx.stroke();
+  }
   if (selected) {
     worldCtx.strokeStyle = SELECTED_COLOR;
     worldCtx.lineWidth = 2.5;
@@ -513,6 +550,7 @@ function placeLifeformsOnGrid() {
     } while ((isBlocked(x, y) || occupied.has(`${y}-${x}`)) && tries < 1000);
     lifeform.pos_x = lifeform.old_x = x;
     lifeform.pos_y = lifeform.old_y = y;
+    lifeform.path = [x, y];
     occupied.add(`${y}-${x}`);
   }
 }
